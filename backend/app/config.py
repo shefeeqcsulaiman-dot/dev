@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     superadmin_password: str = "super123"
     # AI integrations
     openai_api_key: str | None = None
+    # Super Admin alerts (app/observability.py): sent by email when SMTP is set, and/or posted
+    # as {"text": ...} to a chat webhook (Slack, Google Chat, Teams...). Both optional; alerts
+    # always show in Super Admin.
+    alert_email_to: str = ""          # comma-separated
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    alert_webhook_url: str = ""
     # Database connection pool
     db_pool_size: int = 20
     db_max_overflow: int = 40

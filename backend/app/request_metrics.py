@@ -19,6 +19,10 @@ from collections import deque
 import app.cache as cache
 
 _RATE_WINDOW_SECONDS = 60
+# Requests per minute are kept a day (one small counter per minute) for Super Admin's timeline.
+_RATE_KEEP_SECONDS = 26 * 3600
+RATE_KEY = "tf:load:rate:{minute}"
+DEPLOYS_KEY = "tf:deploys"
 _FLUSH_SECONDS = 2
 # Hash of process id -> "<in flight>|<unix time>", written by each process's flush.
 _PROCS_KEY = "tf:load:procs"
@@ -100,7 +104,7 @@ def flush() -> None:
         pipe = r.pipeline(transaction=False)
         for bucket, n in pending.items():
             pipe.incrby(f"tf:load:rate:{bucket}", n)
-            pipe.expire(f"tf:load:rate:{bucket}", _RATE_WINDOW_SECONDS * 3)
+            pipe.expire(f"tf:load:rate:{bucket}", _RATE_KEEP_SECONDS)
         pipe.hset(_PROCS_KEY, _PROC_ID, f"{in_flight}|{time.time():.0f}")
         pipe.expire(_PROCS_KEY, 3600)
         pipe.hset(_BUILDS_KEY, _PROC_ID, f"{_build()}|{time.time():.0f}")
@@ -111,6 +115,27 @@ def flush() -> None:
             for bucket, n in pending.items():
                 _unflushed[bucket] = _unflushed.get(bucket, 0) + n
         raise
+    try:
+        _note_deploy(r)   # after the counts are safely flushed; a failure here mustn't re-add them
+    except Exception:
+        pass
+
+
+_deploy_noted = False
+
+
+def _note_deploy(r) -> None:
+    """The first server copy to report a new build records when it went live (Super Admin's
+    timeline marks deploys). Once per process."""
+    global _deploy_noted
+    if _deploy_noted:
+        return
+    build = _build()
+    if r.set(f"tf:deploy:seen:{build}", f"{time.time():.0f}", nx=True, ex=60 * 86400):
+        import json
+        r.lpush(DEPLOYS_KEY, json.dumps({"build": build, "at": time.time()}))
+        r.ltrim(DEPLOYS_KEY, 0, 49)
+    _deploy_noted = True
 
 
 def _build() -> str:

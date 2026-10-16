@@ -29,6 +29,7 @@ ONLINE_MINUTES = 15
 _WINDOWS = (("online", timedelta(minutes=ONLINE_MINUTES)), ("last_24h", timedelta(hours=24)),
             ("last_7d", timedelta(days=7)), ("last_30d", timedelta(days=30)))
 _PEAK_KEY = "tf:active:peak:{hour}"
+ONLINE_MINUTE_KEY = "tf:active:min:{minute}"   # "online now" each minute, kept a day (timeline)
 _SAMPLE_SECONDS = 60
 _KEEP_HOURS = 8 * 24 + 2   # a week of hourly peaks for the busiest-hours chart
 
@@ -106,6 +107,34 @@ def record_sample(count: int, at: float | None = None) -> None:
         _local_peaks[hour] = (count, at)
     for old in [h for h in _local_peaks if h < hour - _KEEP_HOURS]:
         _local_peaks.pop(old, None)
+
+
+_local_minutes: dict[int, int] = {}
+
+
+def _record_minute(count: int, at: float) -> None:
+    minute = int(at // 60)
+    r = cache._redis()
+    if r is not None:
+        try:
+            r.set(ONLINE_MINUTE_KEY.format(minute=minute), count, ex=26 * 3600)
+            return
+        except Exception:
+            pass
+    _local_minutes[minute] = count
+    for old in [m for m in _local_minutes if m < minute - 26 * 60]:
+        _local_minutes.pop(old, None)
+
+
+def online_by_minute(minutes: list[int]) -> dict[int, int]:
+    r = cache._redis()
+    if r is not None:
+        try:
+            values = r.mget([ONLINE_MINUTE_KEY.format(minute=m) for m in minutes])
+            return {m: int(v) for m, v in zip(minutes, values) if v is not None}
+        except Exception:
+            pass
+    return {m: _local_minutes[m] for m in minutes if m in _local_minutes}
 
 
 def peak_last_24h(now: float | None = None) -> dict | None:
@@ -195,7 +224,11 @@ def _sample_loop() -> None:
                 continue
             db = SessionLocal()
             try:
-                record_sample(online_now(db), now)
+                count = online_now(db)
+                record_sample(count, now)
+                _record_minute(count, now)
+                from app import observability
+                observability.check_alerts(db)
             finally:
                 db.close()
         except Exception as exc:  # never let the panel take a worker down

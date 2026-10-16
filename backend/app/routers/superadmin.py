@@ -1546,6 +1546,19 @@ def system_health(
     dates = [(datetime.now(timezone.utc).date() - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
     error_trend = [{"date": d, "count": error_daily.get(d, 0)} for d in dates]
 
+    # Server errors (500) and overloads (503) per day from Super Admin > Errors' list
+    # (app/server_errors.py: the newest 1,000, shared by every instance via Redis).
+    from app import server_errors as _server_errors
+    server_daily: dict[str, dict[str, int]] = {}
+    for entry in _server_errors.recent(1000)[0]:
+        day = str(entry.get("at") or "")[:10]
+        if day >= dates[0]:
+            kind = "overloads" if entry.get("status") == 503 else "errors"
+            bucket = server_daily.setdefault(day, {"errors": 0, "overloads": 0})
+            bucket[kind] += 1
+    server_error_trend = [{"date": d, "count": server_daily.get(d, {}).get("errors", 0)} for d in dates]
+    overload_trend = [{"date": d, "count": server_daily.get(d, {}).get("overloads", 0)} for d in dates]
+
     total_companies = db.query(func.count(Company.id)).scalar() or 0
     total_users = db.query(func.count(User.id)).scalar() or 0
     total_records = db.query(func.count(AppDataRecord.id)).scalar() or 0
@@ -1576,6 +1589,10 @@ def system_health(
         "db_latency_ms": db_latency_ms,
         "error_trend": error_trend,
         "total_errors": len(error_rows),
+        "server_error_trend": server_error_trend,
+        "overload_trend": overload_trend,
+        "total_server_errors": sum(d["count"] for d in server_error_trend),
+        "total_overloads": sum(d["count"] for d in overload_trend),
         "scale": {
             "companies": total_companies,
             "users": total_users,
@@ -1591,6 +1608,64 @@ def system_health(
         },
         "db_pool": db_pool,
     }
+
+
+class DemoDataIn(BaseModel):
+    months: int = Field(default=6, ge=1, le=12)
+    confirm_name: str = ""
+
+
+@router.post("/companies/{company_id}/demo-data")
+def start_demo_data(company_id: str, payload: DemoDataIn, db: Session = Depends(get_db),
+                    _: User = Depends(_require_superadmin)):
+    """Fill a company with months of realistic demo records (app/demo_data.py), in the
+    background. Only adds records; the Super Admin must type the company's name to confirm,
+    since it writes hundreds of documents into that company."""
+    company = db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    if payload.confirm_name.strip().lower() != (company.name or "").strip().lower():
+        raise HTTPException(status_code=400, detail="Type the company's exact name to confirm")
+    from app import demo_data
+    job = demo_data.start(company_id, payload.months)
+    return {"job_id": job["id"], "status": job["status"]}
+
+
+@router.get("/demo-data/{job_id}")
+def demo_data_status(job_id: str, _: User = Depends(_require_superadmin)):
+    from app import demo_data
+    job = demo_data.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.get("/timeline")
+def timeline(hours: int = 24, db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """The last `hours` (max 24) in 5-minute steps: requests, people online, server errors,
+    overloads, browser errors and deploys (app/observability.py). Cached 60 s."""
+    from app.observability import timeline as _timeline
+    hours = max(1, min(hours, 24))
+    return cache.remember(f"sa:timeline:{hours}", 60, lambda: _timeline(db, hours), _local_cache)
+
+
+@router.get("/alerts")
+def alerts(_: User = Depends(_require_superadmin)):
+    """Recent alerts (newest first) and which channels send them (app/observability.py)."""
+    from app.observability import channels, recent_alerts
+    return {"alerts": recent_alerts(50), "channels": channels()}
+
+
+@router.post("/alerts/test")
+def alerts_test(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """Send one test alert through the configured channels, to check the settings."""
+    from app.observability import _send, _store, channels
+    alert = {"at": datetime.now(timezone.utc).isoformat(), "kind": "test", "level": "info",
+             "message": "Test alert from Super Admin: alerts reach you.", "build": None}
+    _store(alert)
+    if any(channels().values()):
+        _send(alert)
+    return {"ok": True, "channels": channels()}
 
 
 @router.get("/platform-health")

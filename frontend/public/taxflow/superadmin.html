@@ -312,6 +312,7 @@
   <div class="main-wrap">
   <div class="main">
 
+  <div id="sa-alert-banner" style="display:none;margin-bottom:14px"></div>
   <div class="page-section on" id="page-overview">
   <div class="page-head-row">
     <div>
@@ -537,7 +538,7 @@
   <div class="page-head-row">
     <div>
       <div class="page-title">System Health</div>
-      <div class="page-sub">Database reachability, live load, slowest endpoints and background job status. Errors also go to Sentry when SENTRY_DSN is set.</div>
+      <div class="page-sub">Overall status, database, live load, deploys, errors, slowest endpoints and background jobs. Errors also go to Sentry when SENTRY_DSN is set.</div>
     </div>
     <button class="btn btn-g btn-sm" onclick="loadSystemHealth();loadJobHealth();loadImpersonationSessions()">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.5H10"/></svg>
@@ -553,6 +554,20 @@
       <div class="card-hd"><div class="card-title">Live Load</div></div>
       <div id="sa-health-load-wrap"><div class="loading-state">Loading…</div></div>
     </div>
+  </div>
+  <div class="card" style="margin-top:18px">
+    <div class="card-hd"><div>
+      <div class="card-title">Timeline (last 24 hours)</div>
+      <div style="font-size:var(--fs-xs);color:var(--muted);margin-top:2px">Requests per minute and people online (lines), errors (bars), deploys (dashed lines), in 5-minute steps, your local time. Hover for numbers.</div>
+    </div><button class="btn btn-g btn-sm" onclick="loadTimeline()">Refresh</button></div>
+    <div id="sa-timeline-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-top:18px">
+    <div class="card-hd"><div>
+      <div class="card-title">Alerts</div>
+      <div style="font-size:var(--fs-xs);color:var(--muted);margin-top:2px">Checked every minute: database down or nearly out of connections, overloads (503), server errors piling up, a deploy stuck on two builds. Each kind at most once per 30 minutes.</div>
+    </div><button class="btn btn-g btn-sm" id="sa-alert-test-btn" onclick="sendTestAlert(this)">Send test alert</button></div>
+    <div id="sa-alerts-wrap"><div class="loading-state">Loading…</div></div>
   </div>
   <div class="card" style="margin-top:18px">
     <div class="card-hd">
@@ -585,13 +600,23 @@
     </div>
   </div>
   <div class="card" style="margin-top:18px">
-    <div class="card-hd"><div class="card-title">Error Rate Trend</div></div>
+    <div class="card-hd"><div>
+      <div class="card-title">Errors per Day (last 14 days)</div>
+      <div style="font-size:var(--fs-xs);color:var(--muted);margin-top:2px">Server errors are bugs (500), overloads are "server busy" (503), browser errors are JavaScript errors on users' screens. Details on the Errors page.</div>
+    </div></div>
     <div id="sa-health-chart-wrap"><div class="loading-state">Loading…</div></div>
     <div id="sa-dbdiag-wrap" style="margin-top:18px"></div>
   </div>
   </div><!-- /page-health -->
 
   <div class="page-section" id="page-errors">
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-hd"><div>
+      <div class="card-title">Issues by Cause</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">Server errors, browser errors and failed saves together, one row per cause: who and which companies it hit, whether it's still happening, and the likely reason. Details in the lists below.</div>
+    </div></div>
+    <div id="sa-issues-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
   <!-- Server Error Report: 500s (bugs) and 503s (overloaded), from app/server_errors.py -->
   <div class="card" style="margin-bottom:16px">
     <div class="card-hd">
@@ -1039,7 +1064,7 @@
     errors: ()=>{loadServerErrors();loadClientErrors();},
     trials: ()=>loadTrialRequests(),
     renewals: ()=>loadRenewals(),
-    health: ()=>{loadSystemHealth();loadJobHealth();loadImpersonationSessions();startLiveLoadPolling();},
+    health: ()=>{loadSystemHealth();loadJobHealth();loadImpersonationSessions();startLiveLoadPolling();loadTimeline();loadAlerts();},
   };
   const SA_PAGE_TITLES={overview:'Overview',renewals:'Renewals',companies:'Companies',analytics:'Usage Analytics',health:'System Health',errors:'Errors',audit:'Audit Log',trials:'Trial Requests'};
 
@@ -1099,6 +1124,7 @@
       loadPlatformHealth();
       loadActiveUsers();
       loadSaInsights();
+      loadAlerts();
       // the drawer keeps showing the pre-change user list (Disable never turned into Enable, edited names stayed old) unless it is reloaded
       if(document.getElementById('company-drawer').classList.contains('on')) loadDrawerCompany();
       loadAuditLogs();
@@ -1106,6 +1132,153 @@
       document.getElementById('sa-companies-wrap').innerHTML = '<div class="loading-state" style="color:var(--red)">Failed to load: '+escHtml(err.message)+'</div>';
     }
   }
+
+  // ── Issues by cause (Errors page): server + browser errors grouped ──
+  let _clientErrors=[];
+  function _issueHint(text,status){
+    const t=String(text||'');
+    if(/ClientDisconnect|Load failed|Failed to fetch|no connection|NetworkError/i.test(t))return 'Connection dropped (weak phone/tablet signal, or the tab closed). Usually not a bug; saves are retried automatically now.';
+    if(status===503||/TimeoutError|OperationalError|too many connections/i.test(t))return 'Server busy: database connections ran out. Check the Timeline on System Health for the load at that moment.';
+    if(/UndefinedColumn|ProgrammingError|UndefinedTable/i.test(t))return 'Database query bug, often right after a deploy. Needs a code fix.';
+    if(/Invalid time value|Invalid Date/i.test(t))return 'A bad date in a setting or record broke the page. Needs a code fix (or the data corrected).';
+    if(/is not a function|undefined|null|TypeError|ReferenceError/i.test(t))return 'Page bug (JavaScript). Needs a code fix.';
+    if(status===500)return 'Server bug: see the trace in Server Errors below.';
+    return '';
+  }
+  function renderIssues(){
+    const wrap=document.getElementById('sa-issues-wrap');
+    if(!wrap)return;
+    const groups=new Map();
+    const add=(key,src)=>{if(!groups.has(key))groups.set(key,{key,count:0,people:new Set(),companies:new Set(),first:null,last:null,build:null,hours:new Array(24).fill(0),...src});return groups.get(key);};
+    const nowMs=Date.now();
+    const mark=(g,atMs,who,company,build)=>{
+      g.count++;
+      if(who)g.people.add(who);
+      if(company)g.companies.add(company);
+      if(!g.first||atMs<g.first){g.first=atMs;g.build=build||g.build;}
+      if(!g.last||atMs>g.last)g.last=atMs;
+      const h=Math.floor((nowMs-atMs)/3600000);
+      if(h>=0&&h<24)g.hours[23-h]++;
+    };
+    (_serverErrors||[]).forEach(e=>{
+      const at=Date.parse(e.at);if(!at)return;
+      const g=add('s|'+[e.kind,e.method,e.path,e.action||'',e.error].join('|'),{source:e.status===503?'Overload':'Server',
+        title:`${e.error}${e.message&&e.status!==503?': '+String(e.message).split('\n')[0].slice(0,120):''}`,where:`${e.method} ${e.path}${e.action?' · '+e.action:''}`,status:e.status});
+      mark(g,at,e.who,e.company_name,e.build);
+    });
+    (_clientErrors||[]).forEach(e=>{
+      const at=Date.parse(e.occurred_at);if(!at)return;
+      const msg=String(e.message||'').split('\n')[0].replace(/\d+/g,'#').slice(0,140);
+      const failedSave=/save-failed/.test(e.context||'');
+      const g=add('c|'+msg,{source:failedSave?'Save failed':'Browser',title:String(e.message||'').split('\n')[0].slice(0,140),where:e.page||'',status:null});
+      mark(g,at,e.user_name||e.user_email||(e.user_id?'user '+e.user_id.slice(0,6):''),e.company_name,null);
+    });
+    const list=[...groups.values()].map(g=>({...g,live:nowMs-g.last<3600000}));
+    if(!list.length){wrap.innerHTML='<div class="loading-state" style="color:var(--green)">No issues recorded.</div>';return;}
+    list.sort((a,b)=>(b.live-a.live)||(b.people.size-a.people.size)||(b.count-a.count));
+    const tone={Server:'var(--red)',Overload:'var(--amber)','Save failed':'var(--red)',Browser:'var(--purple)'};
+    const spark=hours=>{const mx=Math.max(1,...hours);return `<div title="Last 24 h, one bar per hour" style="display:flex;align-items:flex-end;gap:1px;height:20px;width:96px">${hours.map(v=>`<div style="flex:1;height:${v?Math.max(3,Math.round(v/mx*20)):1}px;background:${v?'var(--red)':'var(--border)'}"></div>`).join('')}</div>`;};
+    const names=set=>{const a=[...set];return a.length?`<b>${a.length}</b> <span style="color:var(--muted)">${escHtml(a.slice(0,3).join(', '))}${a.length>3?` +${a.length-3}`:''}</span>`:'<span style="color:var(--muted)">—</span>';};
+    wrap.innerHTML=`<div style="overflow-x:auto"><table class="tbl" style="font-size:12px"><thead><tr><th>Issue</th><th>Likely cause</th><th style="text-align:right">Count</th><th>People</th><th>Companies</th><th>Last 24 h</th><th>Seen</th></tr></thead><tbody>${list.slice(0,40).map(g=>`<tr>
+      <td style="max-width:320px"><span class="b" style="background:color-mix(in srgb,${tone[g.source]} 14%,transparent);color:${tone[g.source]}">${g.source}</span> ${g.live?'<span class="b" style="background:var(--red-soft);color:var(--red)">still happening</span>':''}
+        <div style="font-weight:600;margin-top:4px;word-break:break-word">${escHtml(g.title)}</div><div style="color:var(--muted);word-break:break-all">${escHtml(g.where)}</div></td>
+      <td style="min-width:220px;max-width:300px;color:var(--muted)">${escHtml(_issueHint(g.title+' '+g.where,g.status))||'—'}</td>
+      <td style="text-align:right;font-weight:700">${g.count}</td>
+      <td style="max-width:200px">${names(g.people)}</td>
+      <td style="max-width:200px">${names(g.companies)}</td>
+      <td>${spark(g.hours)}</td>
+      <td style="white-space:nowrap;color:var(--muted)">first ${escHtml(new Date(g.first).toLocaleString())}${g.build?`<div style="font-size:10.5px">in build ${escHtml(g.build)}</div>`:''}<div>last ${escHtml(new Date(g.last).toLocaleString())}</div></td>
+    </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  // ── Timeline (System Health) ──
+  async function loadTimeline(){
+    const wrap=document.getElementById('sa-timeline-wrap');
+    if(!wrap)return;
+    try{
+      const res=await apiFetch('/superadmin/timeline?hours=24');
+      if(!res.ok)throw new Error('Timeline failed ('+res.status+')');
+      const d=await res.json();
+      const pts=d.points||[];
+      if(!pts.length){wrap.innerHTML='<div class="loading-state">No data yet.</div>';return;}
+      const W=Math.max(720,pts.length*3),H=200,top=10,base=H-34,n=pts.length,x=i=>Math.round(i*(W-50)/Math.max(1,n-1))+40;
+      const maxReq=Math.max(1,...pts.map(p=>p.requests_per_min||0));
+      const maxOn=Math.max(1,...pts.map(p=>p.online||0));
+      const maxErr=Math.max(1,...pts.map(p=>p.errors+p.overloads+p.browser_errors));
+      const yReq=v=>base-Math.round((v/maxReq)*(base-top));
+      const yOn=v=>base-Math.round((v/maxOn)*(base-top));
+      const path=(key,y)=>{let out='',pen=false;pts.forEach((p,i)=>{const v=p[key];if(v==null){pen=false;return;}out+=(pen?'L':'M')+x(i)+' '+y(v)+' ';pen=true;});return out;};
+      const bars=pts.map((p,i)=>{const total=p.errors+p.overloads+p.browser_errors;if(!total)return '';const h=Math.max(3,Math.round(total/maxErr*40));const col=p.overloads?'var(--amber)':p.errors?'var(--red)':'var(--purple)';
+        return `<rect x="${x(i)-1}" y="${base-h}" width="3" height="${h}" fill="${col}"><title>${new Date(p.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}: ${p.errors} server errors, ${p.overloads} overloads, ${p.browser_errors} browser errors</title></rect>`;}).join('');
+      const first=Date.parse(pts[0].at),last=Date.parse(pts[n-1].at);
+      const xAt=ms=>x(Math.round((ms-first)/(last-first||1)*(n-1)));
+      const deploys=(d.deploys||[]).map(dp=>{const ms=Date.parse(dp.at);if(ms<first||ms>last)return '';const xx=xAt(ms);
+        return `<line x1="${xx}" x2="${xx}" y1="${top}" y2="${base}" stroke="var(--primary-ink)" stroke-dasharray="4 3" stroke-width="1.5"><title>Deploy ${escHtml(dp.build)} at ${new Date(ms).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</title></line><text x="${xx+3}" y="${top+10}" font-size="10" fill="var(--primary-ink)">${escHtml(String(dp.build).split('.').pop())}</text>`;}).join('');
+      const hover=pts.map((p,i)=>`<rect x="${x(i)-2}" y="${top}" width="4" height="${base-top}" fill="transparent"><title>${new Date(p.at).toLocaleString([], {weekday:'short',hour:'2-digit',minute:'2-digit'})}\nRequests/min: ${p.requests_per_min??'—'}\nOnline: ${p.online??'—'}\nServer errors: ${p.errors} · Overloads: ${p.overloads} · Browser: ${p.browser_errors}</title></rect>`).join('');
+      const ticks=pts.map((p,i)=>{const t=new Date(p.at);return t.getMinutes()<5&&t.getHours()%3===0?`<text x="${x(i)}" y="${H-14}" font-size="10" text-anchor="middle" fill="var(--muted)">${String(t.getHours()).padStart(2,'0')}:00</text><line x1="${x(i)}" x2="${x(i)}" y1="${base}" y2="${base+4}" stroke="var(--border-strong)"/>`:'';}).join('');
+      const noReq=!pts.some(p=>p.requests_per_min!=null),noOn=!pts.some(p=>p.online!=null);
+      wrap.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--muted);margin-bottom:6px">
+          <span><i style="display:inline-block;width:14px;height:2px;background:var(--primary);vertical-align:middle"></i> Requests/min (max ${maxReq})</span>
+          <span><i style="display:inline-block;width:14px;height:2px;background:var(--green);vertical-align:middle"></i> People online (max ${maxOn})</span>
+          <span><i style="display:inline-block;width:8px;height:8px;background:var(--red)"></i> Server errors</span>
+          <span><i style="display:inline-block;width:8px;height:8px;background:var(--amber)"></i> Overloads</span>
+          <span><i style="display:inline-block;width:8px;height:8px;background:var(--purple)"></i> Browser errors</span>
+          <span><i style="display:inline-block;width:14px;border-top:2px dashed var(--primary-ink);vertical-align:middle"></i> Deploy</span></div>
+        <div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:640px;height:${H}px" preserveAspectRatio="none">
+          <line x1="40" x2="${W-10}" y1="${base}" y2="${base}" stroke="var(--border-strong)"/>
+          ${ticks}${bars}
+          <path d="${path('requests_per_min',yReq)}" fill="none" stroke="var(--primary)" stroke-width="1.8"/>
+          <path d="${path('online',yOn)}" fill="none" stroke="var(--green)" stroke-width="1.8"/>
+          ${deploys}${hover}
+        </svg></div>
+        ${noReq||noOn?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${noReq?'Requests per minute are kept from this release on. ':''}${noOn?'People online fills in minute by minute from this release on.':''}</div>`:''}`;
+    }catch(err){
+      wrap.innerHTML='<div class="loading-state" style="color:var(--red)">'+escHtml(err.message)+'</div>';
+    }
+  }
+
+  // ── Alerts (System Health card + a banner on every page) ──
+  async function loadAlerts(){
+    try{
+      const res=await apiFetch('/superadmin/alerts');
+      if(!res.ok)return;
+      const d=await res.json();
+      renderAlertBanner(d.alerts||[]);
+      const wrap=document.getElementById('sa-alerts-wrap');
+      if(!wrap)return;
+      const ch=d.channels||{};
+      const chText=`<div style="font-size:12px;margin-bottom:10px">Sent by: <b>${ch.email?'Email':'<span style="color:var(--muted)">Email not set</span>'}</b> · <b>${ch.webhook?'Chat webhook':'<span style="color:var(--muted)">Chat webhook not set</span>'}</b>${!ch.email&&!ch.webhook?'<div style="color:var(--muted);margin-top:4px">Alerts show here only. To get them by email, set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM and ALERT_EMAIL_TO on the api component in DigitalOcean; for Slack / Google Chat / Teams, set ALERT_WEBHOOK_URL.</div>':''}</div>`;
+      const tone={red:'var(--red)',amber:'var(--amber)',info:'var(--primary)'};
+      const list=d.alerts||[];
+      wrap.innerHTML=chText+(list.length?`<div style="overflow-x:auto"><table class="tbl" style="font-size:12px"><thead><tr><th>When</th><th>Level</th><th>Alert</th><th>Build</th></tr></thead><tbody>${list.map(a=>`<tr><td style="white-space:nowrap">${escHtml(new Date(a.at).toLocaleString())}</td><td><b style="color:${tone[a.level]||'var(--muted)'}">${escHtml(String(a.level).toUpperCase())}</b></td><td>${escHtml(a.message)}</td><td style="color:var(--muted)">${escHtml(a.build||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div style="font-size:12.5px;color:var(--green)">No alerts.</div>');
+    }catch(err){/* the card keeps its last state */}
+  }
+  function renderAlertBanner(list){
+    const el=document.getElementById('sa-alert-banner');
+    if(!el)return;
+    const hourAgo=Date.now()-3600000;
+    const live=list.filter(a=>a.level!=='info'&&Date.parse(a.at)>=hourAgo);
+    if(!live.length){el.style.display='none';return;}
+    const red=live.some(a=>a.level==='red');
+    const color=red?'var(--red)':'var(--amber)';
+    el.innerHTML=`<div style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;border:1px solid color-mix(in srgb,${color} 40%,transparent);background:color-mix(in srgb,${color} 10%,var(--surface))">
+      <span style="width:10px;height:10px;margin-top:5px;border-radius:50%;background:${color};flex-shrink:0"></span>
+      <div style="flex:1;font-size:13px"><b>${live.length} alert${live.length===1?'':'s'} in the last hour</b><div style="color:var(--muted);margin-top:2px">${live.slice(0,3).map(a=>escHtml(a.message)).join('<br>')}</div></div>
+      <button class="btn btn-g btn-sm" onclick="saGo('health')">System Health</button></div>`;
+    el.style.display='block';
+  }
+  async function sendTestAlert(btn){
+    if(btn)btn.disabled=true;
+    try{
+      const res=await apiFetch('/superadmin/alerts/test',{method:'POST'});
+      const d=await res.json();
+      const ch=d.channels||{};
+      alert(ch.email||ch.webhook?`Test alert sent by ${[ch.email&&'email',ch.webhook&&'chat webhook'].filter(Boolean).join(' and ')}. Check that it arrived.`:'Test alert recorded here. No email or chat webhook is set yet, so nothing was sent.');
+      loadAlerts();
+    }catch(err){alert('Test alert failed: '+err.message);}
+    finally{if(btn)btn.disabled=false;}
+  }
+  setInterval(()=>{if(document.visibilityState==='visible')loadAlerts();},60000);
 
   // ── Platform health strip: refreshed every 30 s while the overview is open ──
   let _healthTimer=null;
@@ -1465,6 +1638,7 @@
                 <button class="menu-item" onclick="closeAllMenus();quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',7)">+7 Days</button>
                 <button class="menu-item" onclick="closeAllMenus();quickExtend('${escHtml(c.id)}','${escHtml(c.name)}','${escHtml(c.subscription_expires_at||'')}',365)">+1 Year</button>
                 <button class="menu-item" onclick="closeAllMenus();openAddUser('${escHtml(c.id)}','${escHtml(c.name)}')">Add User</button>
+                <button class="menu-item" onclick="closeAllMenus();startDemoData('${escHtml(c.id)}','${escHtml(c.name)}')">Fill with demo data…</button>
                 <button class="menu-item" onclick="closeAllMenus();openModules('${escHtml(c.id)}','${escHtml(c.name)}',${escHtml(JSON.stringify(c.modules_enabled||[]))})">Module Permissions</button>
                 <button class="menu-item" onclick="closeAllMenus();downloadCompanyBackup('${escHtml(c.id)}','${escHtml(c.name)}')">⬇ Download Backup</button>
                 <div class="menu-sep"></div>
@@ -2057,6 +2231,40 @@
     finally{ btn.disabled=false; btn.textContent='Delete Company'; }
   }
 
+  // ── Demo data (POST /superadmin/companies/{id}/demo-data, app/demo_data.py) ──
+  async function startDemoData(companyId, companyName){
+    const typed=prompt(`Fill "${companyName}" with 6 months of realistic demo data?\n\nAdds employees with ESS logins, rota, attendance, leave, payroll, customers, suppliers, products, quotations, sales invoices, purchases, payments and expenses. Nothing existing is changed or deleted. Takes about 5 minutes.\n\nType the company name to confirm:`);
+    if(typed==null)return;
+    try{
+      const res=await apiFetch(`/superadmin/companies/${encodeURIComponent(companyId)}/demo-data`,{method:'POST',body:JSON.stringify({months:6,confirm_name:typed})});
+      const d=await res.json();
+      if(!res.ok)throw new Error(d.detail||('Failed ('+res.status+')'));
+      showDemoProgress(d.job_id, companyName);
+    }catch(err){alert('Could not start: '+err.message);}
+  }
+  function showDemoProgress(jobId, companyName){
+    let box=document.getElementById('sa-demo-progress');
+    if(!box){
+      box=document.createElement('div');
+      box.id='sa-demo-progress';
+      box.style.cssText='position:fixed;right:20px;bottom:20px;z-index:2000;width:min(420px,calc(100vw - 40px));max-height:70vh;overflow:auto;background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:16px';
+      document.body.appendChild(box);
+    }
+    const tick=async()=>{
+      try{
+        const res=await apiFetch(`/superadmin/demo-data/${encodeURIComponent(jobId)}`);
+        const j=await res.json();
+        const done=j.status!=='running';
+        const color=j.status==='failed'?'var(--red)':done?'var(--green)':'var(--primary)';
+        box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Demo data · ${escHtml(companyName)}</b>${done?'<button class="btn btn-g btn-sm" onclick="document.getElementById(\'sa-demo-progress\').remove()">Close</button>':''}</div>
+          <div style="font-size:12.5px;color:${color};font-weight:600;margin-bottom:8px">${j.status==='failed'?'Failed: '+escHtml(j.error||''):done?'Finished':'Working: '+escHtml(j.step||'')}</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">${(j.log||[]).map(l=>'✓ '+escHtml(l)).join('<br>')}</div>`;
+        if(!done)setTimeout(tick,4000);
+      }catch(err){setTimeout(tick,8000);}
+    };
+    tick();
+  }
+
   // ── Impersonate ───────────────────────────────────────────────
   async function impersonateCompany(companyId, companyName){
     if(!confirm(`Log in as ${companyName}'s admin? This is recorded in the Audit Log and visible via a banner while active.`)) return;
@@ -2318,6 +2526,8 @@
     try{
       const res=await apiFetch(`/superadmin/client-errors?days=${days}&limit=200`);
       const data=await res.json();
+      _clientErrors=Array.isArray(data.errors)?data.errors:[];
+      renderIssues();
       document.getElementById('sa-stat-errors').textContent=data.total||0;
       const sbBadgeErrors=document.getElementById('sb-badge-errors');
       if(sbBadgeErrors){sbBadgeErrors.textContent=data.total||0;sbBadgeErrors.style.display=data.total?'inline':'none';}
@@ -2386,6 +2596,7 @@
       const data=await res.json();
       _serverErrors=Array.isArray(data.errors)?data.errors:[];
       _serverErrorsSource=data.source||'';
+      renderIssues();
       const dayAgo=Date.now()-86400000;
       const last24=_serverErrors.filter(e=>Date.parse(e.at)>=dayAgo).length;
       const stat=document.getElementById('sa-stat-server-errors');
@@ -2776,20 +2987,38 @@
     const chartWrap=document.getElementById('sa-health-chart-wrap');
     statusWrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
     try{
-      const res=await apiFetch('/superadmin/system-health?days=14');
+      const [res,liveRes]=await Promise.all([apiFetch('/superadmin/system-health?days=14'),apiFetch('/superadmin/platform-health')]);
       const data=await res.json();
+      const live=liveRes.ok?await liveRes.json():null;
+      const lvl=live?.status?.level||(data.db_ok?'green':'red');
+      const lvlColor={green:'var(--green)',amber:'var(--amber)',red:'var(--red)'}[lvl];
       const dotColor=data.db_ok?'var(--green)':'var(--red)';
+      const conn=live?.db_connections;
+      const connPct=conn&&conn.max?Math.round(conn.used/conn.max*100):null;
+      const builds=Object.entries(live?.deploy?.builds||{});
+      const stat=(label,val,color,sub)=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-val" style="font-size:18px${color?`;color:${color}`:''}">${val}</div>${sub?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${sub}</div>`:''}</div>`;
       statusWrap.innerHTML=`
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="width:12px;height:12px;border-radius:50%;background:${lvlColor};box-shadow:0 0 0 4px color-mix(in srgb,${lvlColor} 22%,transparent)"></span>
+          <b style="font-size:15px">${{green:'All systems normal',amber:'Needs a look',red:'Problem'}[lvl]}</b></div>
+        ${(live?.status?.reasons||[]).length?`<div style="font-size:12.5px;color:${lvlColor};margin:-4px 0 12px">${live.status.reasons.map(escHtml).join(' · ')}</div>`:''}
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          <div class="stat-card"><div class="stat-label"><span class="health-dot" style="background:${dotColor}"></span>Database</div><div class="stat-val" style="font-size:18px;color:${dotColor}">${data.db_ok?'Reachable':'Down'}</div></div>
-          <div class="stat-card"><div class="stat-label">DB Latency</div><div class="stat-val" style="font-size:18px">${data.db_latency_ms!=null?data.db_latency_ms+' ms':'—'}</div></div>
-          <div class="stat-card"><div class="stat-label">Errors (period)</div><div class="stat-val" style="font-size:18px;color:${data.total_errors?'var(--red)':'var(--green)'}">${data.total_errors}</div></div>
-          <div class="stat-card"><div class="stat-label">Companies</div><div class="stat-val" style="font-size:18px">${data.scale.companies}</div></div>
-          <div class="stat-card"><div class="stat-label">Users</div><div class="stat-val" style="font-size:18px">${data.scale.users}</div></div>
-          <div class="stat-card"><div class="stat-label">Total Records</div><div class="stat-val" style="font-size:18px">${data.scale.records.toLocaleString()}</div></div>
+          ${stat(`<span class="health-dot" style="background:${dotColor}"></span>Database`,data.db_ok?'Reachable':'Down',dotColor)}
+          ${stat('DB Latency',data.db_latency_ms!=null?data.db_latency_ms+' ms':'—',data.db_latency_ms>150?'var(--amber)':'')}
+          ${stat('DB Connections',conn?`${conn.used} / ${conn.max}`:'—',connPct>=90?'var(--red)':connPct>=75?'var(--amber)':'',conn?`${connPct}% of the database limit`:'PostgreSQL only')}
+          ${stat('Live Build',builds.length===1?escHtml(builds[0][0]):builds.length?'Deploying':'—',builds.length>1?'var(--amber)':'',builds.length===1?`${live.deploy.copies} server cop${live.deploy.copies===1?'y':'ies'} on it`:builds.map(([b,n])=>`${escHtml(b)} ×${n}`).join(' · '))}
+          ${stat('Online Now',live?.online_now??'—','','people active in the last 15 min')}
+          ${stat('Companies',data.scale.companies)}
+          ${stat('Users',data.scale.users)}
+          ${stat('Total Records',data.scale.records.toLocaleString())}
         </div>`;
-      chartWrap.innerHTML=`<div class="chart-wrap">${saBarChart(data.error_trend,{color:'var(--red)'})}</div>`;
-      renderLiveLoad(data);
+      const chart=(title,series,total,color)=>`<div style="flex:1 1 300px;min-width:280px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><b>${title}</b><span style="color:${total?color:'var(--green)'}">${total} in 14 days</span></div><div class="chart-wrap">${saBarChart(series,{color})}</div></div>`;
+      chartWrap.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:18px">
+        ${chart('Server errors (500)',data.server_error_trend||[],data.total_server_errors||0,'var(--red)')}
+        ${chart('Overloads (503)',data.overload_trend||[],data.total_overloads||0,'var(--amber)')}
+        ${chart('Browser errors',data.error_trend||[],data.total_errors||0,'var(--purple)')}
+      </div>`;
+      if(live)renderLiveLoad(live);
       loadDbDiagnostics();
       loadEndpointStats();
     }catch(err){
@@ -2800,21 +3029,22 @@
   function renderLiveLoad(data){
     const wrap=document.getElementById('sa-health-load-wrap');
     if(!wrap) return;
+    // `data` is /superadmin/platform-health: load is cluster-wide when Redis is on.
     const load=data.load||{};
-    const pool=data.db_pool;
+    const e1=data.errors_1h||{};
+    const copies=data.deploy?.copies;
     const scopeNote=load.cluster_wide
-      ? 'Cluster-wide (all instances)'
-      : 'This server instance only — Redis not active, so other instances aren\'t counted';
-    const poolCard=pool
-      ? `<div class="stat-card"><div class="stat-label">DB Pool In Use</div><div class="stat-val" style="font-size:18px">${pool.checked_out} / ${pool.capacity}</div></div>`
-      : `<div class="stat-card"><div class="stat-label">DB Pool In Use</div><div class="stat-val" style="font-size:14px;color:var(--muted)">Not available for this DB</div></div>`;
+      ? `All servers (${copies||'?'} server cop${copies===1?'y':'ies'})`
+      : 'This server copy only (Redis not active, so other copies aren\'t counted)';
     wrap.innerHTML=`
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-        <div class="stat-card"><div class="stat-label">Requests In Flight</div><div class="stat-val" style="font-size:18px">${load.in_flight_requests}</div></div>
-        <div class="stat-card"><div class="stat-label">Requests This Minute</div><div class="stat-val" style="font-size:18px">${load.requests_this_minute}</div></div>
-        ${poolCard}
+        <div class="stat-card"><div class="stat-label">Requests In Progress</div><div class="stat-val" style="font-size:18px">${load.in_flight??'—'}</div></div>
+        <div class="stat-card"><div class="stat-label">Requests This Minute</div><div class="stat-val" style="font-size:18px">${load.requests_this_minute??'—'}</div></div>
+        <div class="stat-card"><div class="stat-label">Online Now</div><div class="stat-val" style="font-size:18px">${data.online_now??'—'}</div></div>
+        <div class="stat-card"><div class="stat-label">Overloads (1 h)</div><div class="stat-val" style="font-size:18px;color:${e1.overloads?'var(--red)':'var(--green)'}">${e1.overloads||0}</div></div>
+        <div class="stat-card"><div class="stat-label">Server Errors (1 h)</div><div class="stat-val" style="font-size:18px;color:${e1.errors?'var(--amber)':'var(--green)'}">${e1.errors||0}</div></div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">${scopeNote} · auto-refreshes every 5s while this page is open</div>`;
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">${scopeNote} · refreshes every 5 s while this page is open</div>`;
   }
 
   let _saHealthLoadTimer=null;
@@ -2822,8 +3052,9 @@
     stopLiveLoadPolling();
     _saHealthLoadTimer=setInterval(async()=>{
       try{
-        const res=await apiFetch('/superadmin/system-health?days=1');
-        renderLiveLoad(await res.json());
+        // platform-health, not system-health: that one counts every record in the database
+        const res=await apiFetch('/superadmin/platform-health');
+        if(res.ok)renderLiveLoad(await res.json());
       }catch(err){/* silent — full loadSystemHealth() surfaces errors already */}
     },5000);
   }

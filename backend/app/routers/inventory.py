@@ -717,6 +717,10 @@ def delete_mapping(
     )
     if not mapping:
         raise HTTPException(status_code=404, detail="Stock mapping not found")
+    # Stock movements keep their mapping (it is their history): refuse instead of the
+    # database's foreign-key error, which surfaced as a 500 "Delete failed".
+    if db.query(StockMovement.id).filter(StockMovement.mapping_id == mapping.id).first():
+        raise HTTPException(status_code=409, detail="This item has stock movements, so its mapping can't be deleted. Set it inactive instead.")
     db.delete(mapping)
     db.commit()
 
