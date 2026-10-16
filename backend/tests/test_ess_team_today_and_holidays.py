@@ -188,3 +188,28 @@ def test_team_today_uses_rota_leave_mark(client, db, auth_headers):
     assert r.status_code == 200, r.text
     status = client.get("/api/v1/ess/team/today", headers=headers).json()[0]["status"]
     assert status in ("leave", "weekend", "holiday")
+
+
+def test_team_today_links_each_colleague_photo(client, db, auth_headers):
+    """The team list carries a link per photo (not the base64 itself); the link serves the image,
+    cached for good, and a wrong or stale version is a 404."""
+    import base64
+
+    company_id = _company_id(client, auth_headers)
+    me, headers = _ess_login(client, db, auth_headers, company_id, "TPHOTO-ME", "tphoto.me", department="PhotoDept")
+    peer, _ = _ess_login(client, db, auth_headers, company_id, "TPHOTO-PEER", "tphoto.peer", department="PhotoDept")
+    png = b"\x89PNG\r\n\x1a\nfake-image-bytes"
+    peer.photo = "data:image/png;base64," + base64.b64encode(png).decode()
+    db.commit()
+
+    rows = {r["employee_no"]: r for r in client.get("/api/v1/ess/team/today", headers=headers).json()}
+    assert rows["TPHOTO-ME"]["photo_url"] is None
+    url = rows["TPHOTO-PEER"]["photo_url"]
+    assert url.startswith(f"/api/v1/ess/team-photo/{peer.id}?v=") and "base64" not in str(rows)
+
+    img = client.get(url)
+    assert img.status_code == 200 and img.content == png and img.headers["content-type"] == "image/png"
+    assert "immutable" in img.headers["cache-control"]
+    assert client.get(url, headers={"If-None-Match": img.headers["etag"]}).status_code == 304
+    assert client.get(url.split("?")[0] + "?v=0000000000000000").status_code == 404
+    assert client.get(f"/api/v1/ess/team-photo/{me.id}?v=x").status_code == 404

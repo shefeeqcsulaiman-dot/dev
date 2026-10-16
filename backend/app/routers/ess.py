@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import re
 import secrets
@@ -6,6 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import Response
 import jwt
 from jwt import PyJWTError as JWTError
 from pydantic import BaseModel
@@ -260,6 +263,37 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
     ]
 
 
+def _team_photo_url(emp: Employee) -> str | None:
+    photo = emp.photo or ""
+    if not photo.startswith("data:"):
+        return None
+    return f"/api/v1/ess/team-photo/{emp.id}?v={hashlib.sha256(photo.encode()).hexdigest()[:16]}"
+
+
+@router.get("/team-photo/{employee_id}")
+def ess_team_photo(employee_id: str, request: Request, v: str = Query(default="", max_length=32),
+                   db: Session = Depends(get_db)):
+    """A colleague's photo for the ESS team list, as an image. No login header (an <img src>
+    can't send one): like app_data.employee_photo(), the URL is the capability -- a random
+    employee id plus a hash of the photo itself, both only in /ess/team/today answers to
+    colleagues. Cached for good: a new photo gets a new v."""
+    photo = db.query(Employee.photo).filter(Employee.id == employee_id).scalar() or ""
+    if not (photo.startswith("data:") and v and v == hashlib.sha256(photo.encode()).hexdigest()[:16]):
+        raise HTTPException(status_code=404, detail="No photo")
+    match = re.match(r"^data:([\w/+.-]+);base64,(.*)$", photo, re.S)
+    if not match or not match.group(1).startswith("image/"):
+        raise HTTPException(status_code=404, detail="No photo")
+    try:
+        raw = base64.b64decode(match.group(2))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No photo")
+    etag = f'"{v}"'
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=raw, media_type=match.group(1), headers=headers)
+
+
 @router.get("/team/today")
 def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     """Today's attendance status (Present/Absent/On Leave/Holiday/Weekend)
@@ -363,10 +397,9 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
             "employee_no": p.employee_no,
             "full_name": p.full_name,
             "designation": p.designation,
-            # No "photo" -- grepping ess.js confirmed no team-roster render
-            # ever reads a colleague's photo (same reasoning as EssTeamMemberOut
-            # above), so this was a pure per-colleague base64-blob payload cost
-            # on every single dashboard load for a field nothing displays.
+            # A link, not the photo itself (tens of KB of base64 each): the browser
+            # fetches each colleague's photo once and keeps it (ess_team_photo()).
+            "photo_url": _team_photo_url(p),
             "status": day_status,
             "starts_at": (shift_start.get(p.employee_no) or standard_start) if day_status == "upcoming" else None,
             "check_in": check_in,

@@ -2106,6 +2106,17 @@
     off: {label: 'Day Off', color: '#94a3b8', bg: 'rgba(148,163,184,.16)'}
   };
 
+  // A colleague's photo (GET /ess/team-photo, cached by the browser), or their initials.
+  function teamAvatar(e, size) {
+    var px = size || 32;
+    var initials = String(e.full_name || '?').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+    var circle = 'width:' + px + 'px;height:' + px + 'px;border-radius:50%;flex-shrink:0;';
+    var fallback = '<span class="team-av" style="' + circle + 'display:inline-flex;align-items:center;justify-content:center;background:var(--accent-glow,rgba(59,130,246,.12));color:var(--accent,#2563eb);font-size:' + Math.round(px * .38) + 'px;font-weight:700">' + escHtml(initials) + '</span>';
+    if (!e.photo_url) return fallback;
+    var src = apiBase().replace(/\/api\/v1\/?$/, '') + e.photo_url;
+    return '<img class="team-av" src="' + escHtml(src) + '" alt="" loading="lazy" style="' + circle + 'object-fit:cover;background:var(--bg3)" onerror="this.style.visibility=\'hidden\'">';
+  }
+
   // Dashboard banner: the caller's own department today -- counts, a presence bar, and who's in.
   function renderDashTeamAtt(rows) {
     var el = document.getElementById('dash-team-att');
@@ -2124,7 +2135,7 @@
       var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
       var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
       var sub = escHtml(e.designation || '') + (e.status === 'present' && e.check_in ? ' · in ' + escHtml(e.check_in) : '') + (e.status === 'upcoming' && e.starts_at ? ' · starts ' + escHtml(e.starts_at) : '');
-      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div>' +
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:10px;min-width:0">' + teamAvatar(e, 32) + '<div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div></div>' +
         '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span></div>';
     }).join('');
     el.innerHTML =
@@ -2158,7 +2169,7 @@
           var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
           var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
           var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
-          return '<tr><td>' + name + '</td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
+          return '<tr><td><div style="display:flex;align-items:center;gap:10px">' + teamAvatar(e, 34) + '<span>' + name + '</span></div></td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
         }).join('') : '<tr><td colspan="4" class="empty">No teammates found in your department.</td></tr>';
       }
       renderDashTeamAtt(rows);
