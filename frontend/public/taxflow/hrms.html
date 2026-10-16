@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=701c8cb647" as="style">
-<link rel="preload" href="src/app.js?v=ca6f3106aa" as="script">
+<link rel="preload" href="src/app.js?v=bed60928b8" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=701c8cb647">
 <style>
@@ -1563,7 +1563,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <th style="width:90px">Carry Fwd</th>
               <th style="width:90px">Max Carry</th>
               <th style="width:80px">Encash</th>
-              <th style="width:70px">Status</th>
+              <th style="width:96px">Status</th>
               <th style="width:40px"></th>
             </tr>
           </thead>
@@ -1576,7 +1576,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="15" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Sick Leave">
@@ -1587,7 +1587,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Emergency Leave">
@@ -1598,7 +1598,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Maternity Leave">
@@ -1609,7 +1609,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Paternity Leave">
@@ -1620,7 +1620,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Hajj Leave">
@@ -1631,7 +1631,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Unpaid Leave">
@@ -1642,7 +1642,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Study Leave">
@@ -1653,7 +1653,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Compassionate Leave">
@@ -1664,7 +1664,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="0" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
             <tr data-leave-type="Compensatory Leave">
@@ -1675,7 +1675,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><input class="fi mono" style="width:70px;padding:3px 6px" value="30" placeholder="days"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
-              <td><span class="b b-g" style="font-size:11px">Active</span></td>
+              <td><select class="fi lt-status" style="padding:3px 4px;font-size:12px" aria-label="Status" onchange="markLeaveTypeStatus(this)"><option selected>Active</option><option>Inactive</option></select></td>
               <td></td>
             </tr>
           </tbody>
@@ -3262,7 +3262,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=ca6f3106aa" defer></script>
+<script src="src/app.js?v=bed60928b8" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

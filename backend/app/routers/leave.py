@@ -199,6 +199,36 @@ def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
     return caps
 
 
+def inactive_leave_types(db: Session, company_id: str) -> set[str]:
+    """Leave types switched off (Status = Inactive) in HR Settings > Leave Policy > Leave
+    Types: new requests for them are refused. Existing requests and history are untouched."""
+    row = (
+        db.query(AppDataRecord)
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "hrLeavePolicy",
+            AppDataRecord.record_key == "leave-policy",
+        )
+        .first()
+    )
+    if not row:
+        return set()
+    try:
+        data = json.loads(row.payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return set()
+    return {
+        str(entry.get("type") or "").strip()
+        for entry in ((data.get("leave_types") or []) if isinstance(data, dict) else [])
+        if isinstance(entry, dict) and str(entry.get("status") or "").strip().lower() == "inactive"
+    } - {""}
+
+
+def assert_leave_type_offered(db: Session, company_id: str, leave_type: str) -> None:
+    if leave_type in inactive_leave_types(db, company_id):
+        raise HTTPException(status_code=400, detail=f"{leave_type} is switched off in HR Settings > Leave Policy")
+
+
 class LeaveRequestOut(BaseModel):
     id: str
     employee_id: str
@@ -286,6 +316,7 @@ def create_leave_request(
 ) -> LeaveRequestOut:
     if payload.leave_type not in _ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Unrecognized leave type")
+    assert_leave_type_offered(db, principal.company_id, payload.leave_type)
     if payload.end_date < payload.start_date:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
     emp = db.query(Employee).filter(Employee.id == payload.employee_id, Employee.company_id == principal.company_id).first()

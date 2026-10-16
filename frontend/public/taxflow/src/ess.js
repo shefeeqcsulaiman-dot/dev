@@ -744,6 +744,16 @@
       if (!r.ok) throw new Error('bad response');
       var data = await r.json();
       _essLeaveBal = data.by_type || {};
+      // Types HR switched off (Leave Policy > Status = Inactive) can't be requested.
+      var off = data.inactive_types || [];
+      var ltSel = document.getElementById('leave-type');
+      if (ltSel) {
+        [].forEach.call(ltSel.options, function(o) { var v = o.value || o.textContent; o.hidden = off.indexOf(v) >= 0; o.disabled = o.hidden; });
+        if (ltSel.selectedOptions[0] && ltSel.selectedOptions[0].disabled) {
+          var first = [].find.call(ltSel.options, function(o) { return !o.disabled; });
+          if (first) ltSel.value = first.value || first.textContent;
+        }
+      }
       essUpdateLeavePreview();
       var types = Object.keys(data.by_type || {});
       var annual = _essLeaveBal['Annual Leave'];

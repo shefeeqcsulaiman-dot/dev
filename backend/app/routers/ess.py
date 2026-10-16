@@ -30,6 +30,8 @@ from app.routers.leave import (
     _used_days_by_employee_and_type,
     annual_leave_basis,
     assert_leave_available,
+    assert_leave_type_offered,
+    inactive_leave_types,
     leave_request_days,
 )
 from app.security import pwd_context, verify_employee_password
@@ -455,8 +457,11 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
     used_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id)   # one grouped query
     pending_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id, statuses=("pending",))
     annual_used = used_map.get((emp.id, "Annual Leave"), 0)
+    inactive = inactive_leave_types(db, emp.company_id)
     by_type = {}
     for leave_type, cap in caps.items():
+        if leave_type in inactive:
+            continue
         if leave_type == "Annual Leave":
             entitlement, used = annual_entitlement, annual_used
         else:
@@ -467,7 +472,7 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
         by_type[leave_type] = {"entitlement": entitlement, "used": used, "pending": pending,
                                "remaining": max(0, entitlement - used - pending)}
     by_type.get("Annual Leave", {})["basis"] = annual_leave_basis(db, emp.company_id, emp.employee_no)
-    return {"year": date.today().year, "by_type": by_type}
+    return {"year": date.today().year, "by_type": by_type, "inactive_types": sorted(inactive)}
 
 
 class EssAnnouncementOut(BaseModel):
@@ -652,6 +657,7 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
     emp = ess_bearer(request, db)
     if payload.leave_type not in _ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Unrecognized leave type")
+    assert_leave_type_offered(db, emp.company_id, payload.leave_type)
     if payload.end_date < payload.start_date:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
     overlap = (

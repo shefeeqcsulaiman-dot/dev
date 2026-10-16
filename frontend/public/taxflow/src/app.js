@@ -20430,6 +20430,7 @@ function saveLeavePolicies(){
       carry_forward:cells[3]?.value||'No',
       max_carry:cells[4]?.value||'0',
       encash:cells[5]?.value||'No',
+      status:tr.querySelector('.lt-status')?.value||'Active',
     };
   });
   const policies=[...document.querySelectorAll('#leave-policies-tbody tr')].map(tr=>{
@@ -20460,7 +20461,28 @@ function saveLeavePolicies(){
   const data={leave_types:types,leave_policies:policies,year_start:yearStart,accrual,carry_deadline:carryDeadline,encash_timing:encashTiming};
   saveServer('hrLeavePolicy',{id:'leave-policy',...data});
   _applyLeavePolicyDaysToMap(policies);
+  _applyInactiveLeaveTypes(types.filter(t=>t.status==='Inactive').map(t=>t.type));
   toast('Leave policy saved','ok');
+}
+
+// Leave Types > Status: an Inactive type stays listed here (greyed) but disappears from the
+// HRMS leave form; the server refuses new requests for it (leave.py assert_leave_type_offered).
+function markLeaveTypeStatus(sel){
+  const tr=sel?.closest('tr');
+  if(tr)tr.style.opacity=sel.value==='Inactive'?'.55':'';
+}
+function _applyInactiveLeaveTypes(inactive){
+  const off=new Set(inactive||[]);
+  window._inactiveLeaveTypes=off;
+  document.querySelectorAll('#leave-types-tbody .lt-status').forEach(markLeaveTypeStatus);
+  const form=document.getElementById('leave-type');
+  if(form){
+    [...form.options].forEach(o=>{o.hidden=off.has(o.value||o.textContent);o.disabled=o.hidden;});
+    if(form.selectedOptions[0]?.disabled){
+      const first=[...form.options].find(o=>!o.disabled);
+      if(first)form.value=first.value||first.textContent;
+    }
+  }
 }
 
 // Previously leaveEntitlementDays() only ever read the hardcoded
@@ -20522,7 +20544,10 @@ async function loadLeavePoliciesFromServer(){
       if(cells[3]&&t.carry_forward)cells[3].value=t.carry_forward;
       if(cells[4]&&t.max_carry!=null&&t.max_carry!=='')cells[4].value=t.max_carry;
       if(cells[5]&&t.encash)cells[5].value=t.encash;
+      const status=row.querySelector('.lt-status');
+      if(status)status.value=t.status==='Inactive'?'Inactive':'Active';
     });
+    _applyInactiveLeaveTypes((rec.leave_types||[]).filter(t=>t.status==='Inactive').map(t=>t.type));
     const setSelVal=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
     setSelVal('leave-year-start',rec.year_start);
     setSelVal('leave-accrual',rec.accrual);
