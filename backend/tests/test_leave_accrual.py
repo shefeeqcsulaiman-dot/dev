@@ -1,0 +1,131 @@
+"""Leave days and entitlement by policy (2026-10-17):
+- Working basis skips the company weekend, Holiday Calendar days and rota days off;
+  Calendar basis counts every day; non-annual types use their own Leave Types Basis.
+- Annual Leave is earned by HR Settings > Accrual from the join date, in the leave year.
+- recount_leave_requests() re-applies the rules to existing requests."""
+import json
+import uuid
+from datetime import date
+
+from app.models import AppDataRecord, Employee, LeaveRequest
+from app.routers import leave
+from app.routers.leave import accrued_days, leave_year_window
+
+
+def _company_id(client, headers):
+    return client.get("/api/v1/auth/me", headers=headers).json()["company"]["id"]
+
+
+def _save(client, headers, collection, record):
+    r = client.post("/api/v1/app-data", headers=headers, params={"action": "save"}, json={"collection": collection, "record": record})
+    assert r.status_code == 200, r.text
+
+
+def _employee(client, db, headers, cid, **extra):
+    no = f"LA{uuid.uuid4().hex[:6]}"
+    _save(client, headers, "employees", {"id": no, "name": f"Leave {no}", "department": "LeaveDept",
+                                         "designation": "Staff", "status": "Active", "salary": 5000, **extra})
+    db.expire_all()
+    return db.query(Employee).filter(Employee.company_id == cid, Employee.employee_no == no).first()
+
+
+def _settings(client, headers, **values):
+    _save(client, headers, "hrLeavePolicy", {"id": "leave-policy", **values})
+
+
+def _days(client, headers, emp, leave_type, start, end):
+    r = client.get("/api/v1/leave/days", headers=headers,
+                   params={"employee_id": emp.id, "leave_type": leave_type, "start": start, "end": end})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_working_basis_skips_weekend_holidays_and_rota_days_off(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    _settings(client, auth_headers, leave_policies=[{"value": "Internal 22 Working", "days": 22, "basis": "Working"}],
+              leave_types=[{"type": "Sick Leave", "days": 90, "basis": "Calendar"}])
+    emp = _employee(client, db, auth_headers, cid, leave_policy="Internal 22 Working")
+    # Mon 30 Nov .. Sun 6 Dec 2026: National Day 2-3 Dec, a rota day off on Fri 4 Dec
+    _save(client, auth_headers, "hrHolidays", {"id": "la-hol-1202", "date": "2026-12-02", "name": "UAE National Day"})
+    _save(client, auth_headers, "hrHolidays", {"id": "la-hol-1203", "date": "2026-12-03", "name": "UAE National Day"})
+    _save(client, auth_headers, "rotaAssignments", {"id": f"{emp.employee_no}-2026-12-04", "employee_id": emp.employee_no,
+                                                    "date": "2026-12-04", "code": "OFF", "mark": "Off"})
+    for day in ("2026-11-30", "2026-12-01"):
+        _save(client, auth_headers, "rotaAssignments", {"id": f"{emp.employee_no}-{day}", "employee_id": emp.employee_no,
+                                                        "date": day, "code": "M", "mark": "Shift", "start": "09:00", "end": "17:00"})
+    no_rota = _employee(client, db, auth_headers, cid, leave_policy="Internal 22 Working")
+    weekend_row = db.query(AppDataRecord).filter(AppDataRecord.company_id == cid, AppDataRecord.collection == "hr_settings",
+                                                 AppDataRecord.record_key == "weekend-policy-config").all()
+    saved = [(r.id, r.payload) for r in weekend_row]
+    for r in weekend_row:
+        r.payload = json.dumps({"mode": "sat_sun"})
+    db.commit()
+    try:
+        d = _days(client, auth_headers, emp, "Annual Leave", "2026-11-30", "2026-12-06")
+        # On the rota: Mon 30 + Tue 1 working; Wed 2, Thu 3 holidays; Fri 4 off; Sat 5, Sun 6 have no
+        # entry in a week that has one, so they are rota days off too.
+        assert d["basis"] == "Working" and d["days"] == 2
+        assert d["skipped"] == {"holiday": 2, "day_off": 3}
+        # Without a rota: the company weekend applies.
+        d = _days(client, auth_headers, no_rota, "Annual Leave", "2026-11-30", "2026-12-06")
+        assert d["days"] == 3 and d["skipped"] == {"weekend": 2, "holiday": 2}
+        assert _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 7   # Calendar
+        _settings(client, auth_headers, leave_types=[{"type": "Sick Leave", "days": 90, "basis": "Working"}])
+        assert _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 2   # its own Basis
+    finally:
+        for rid, payload in saved:
+            db.get(AppDataRecord, rid).payload = payload
+        db.commit()
+        _settings(client, auth_headers)
+
+
+def test_leave_year_windows():
+    assert leave_year_window({}, None, date(2026, 10, 17)) == (date(2026, 1, 1), date(2027, 1, 1))
+    assert leave_year_window({"year_start": "April"}, None, date(2026, 2, 1)) == (date(2025, 4, 1), date(2026, 4, 1))
+    assert leave_year_window({"year_start": "Joining Date (rolling)"}, date(2023, 6, 15), date(2026, 3, 1)) == (date(2025, 6, 15), date(2026, 6, 15))
+
+
+def test_accrual_monthly_quarterly_upfront_from_join_date():
+    on = date(2026, 10, 17)
+    assert accrued_days({"accrual": "Monthly (1/12 per month)"}, 30, date(2020, 1, 1), on) == 25        # Jan..Oct
+    assert accrued_days({"accrual": "Monthly (1/12 per month)"}, 30, date(2026, 8, 15), on) == 7.5      # Aug, Sep, Oct
+    assert accrued_days({"accrual": "Monthly (1/12 per month)"}, 30, date(2026, 11, 1), on) == 0        # not joined yet
+    assert accrued_days({"accrual": "Upfront (full year on start)"}, 30, date(2020, 1, 1), on) == 30
+    assert accrued_days({"accrual": "Upfront (full year on start)"}, 30, date(2026, 10, 1), on) == 7.5   # Oct..Dec of 12
+    assert accrued_days({"accrual": "Quarterly"}, 30, date(2020, 1, 1), on) == 30                         # Q4 started
+    assert accrued_days({"accrual": "Quarterly"}, 30, date(2026, 8, 1), on) == 15                         # Q3 + Q4
+
+
+def test_new_joiner_can_only_take_what_is_earned(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    _settings(client, auth_headers, accrual="Monthly (1/12 per month)",
+              leave_policies=[{"value": "UAE 30 Calendar", "days": 30, "basis": "Calendar"}])
+    today = date.today()
+    joined = date(today.year, today.month, 1)
+    emp = _employee(client, db, auth_headers, cid, leave_policy="UAE 30 Calendar", join_date=joined.isoformat())
+    try:
+        bal = next(b for b in client.get("/api/v1/leave/balance", headers=auth_headers).json() if b["employee_id"] == emp.id)
+        assert bal["annual_entitlement"] == 2.5 and bal["annual_yearly_entitlement"] == 30   # one month earned
+        start = date(today.year, today.month, 1)
+        r = client.post("/api/v1/leave/requests", headers=auth_headers, json={
+            "employee_id": emp.id, "leave_type": "Annual Leave",
+            "start_date": start.isoformat(), "end_date": start.replace(day=start.day + 4).isoformat()})
+        assert r.status_code == 400 and "available" in r.json()["detail"]
+    finally:
+        _settings(client, auth_headers)
+
+
+def test_recount_applies_the_rules_to_existing_requests(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    _settings(client, auth_headers, leave_policies=[{"value": "Internal 22 Working", "days": 22, "basis": "Working"}])
+    emp = _employee(client, db, auth_headers, cid, leave_policy="Internal 22 Working")
+    try:
+        req = LeaveRequest(company_id=cid, employee_id=emp.id, leave_type="Annual Leave", start_date="2026-11-02",
+                           end_date="2026-11-08", days=7, status="approved")   # counted as calendar days before
+        db.add(req)
+        db.commit()
+        assert leave.recount_leave_requests(db, cid, date(2026, 1, 1)) >= 1
+        db.refresh(req)
+        assert req.days == 5   # Mon 2 .. Fri 6 Nov; the weekend skipped
+    finally:
+        _settings(client, auth_headers)

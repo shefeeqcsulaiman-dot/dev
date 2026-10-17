@@ -1,6 +1,7 @@
 """GET /ess/leave-balance -- the Dashboard's Leave Balance widget. Same
 entitlement/used/remaining math as HRMS's admin-only GET /leave/balance
 (leave:view-gated), scoped to the calling employee instead."""
+import pytest
 import json
 
 from app.models import AppDataRecord, Employee
@@ -132,3 +133,11 @@ def test_ess_leave_balance_annual_leave_falls_back_to_configured_type_cap(client
             AppDataRecord.record_key == "leave-policy",
         ).delete()
         db.commit()
+
+
+@pytest.fixture(autouse=True)
+def _full_year_entitlement(monkeypatch):
+    """These tests are about other rules: give the whole year's Annual Leave up front, as
+    before accrual (tests/test_leave_accrual.py covers accrual)."""
+    from app.routers import leave as _leave
+    monkeypatch.setattr(_leave, "accrued_days", lambda settings, yearly, join_date, on: yearly)

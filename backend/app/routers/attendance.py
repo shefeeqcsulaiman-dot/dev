@@ -1613,13 +1613,16 @@ def _shift_paid_seconds(row: Any, shift: DayShift | None, offset: timedelta) -> 
 
 
 def _holiday_dates(db: Session, company_id: str) -> set[str]:
-    """Holiday Calendar dates (hrHolidays) in ISO form; other formats are skipped."""
+    """Holiday Calendar dates (hrHolidays) in ISO form; other formats are skipped.
+    Whole rows, not the payload column: holidays are stored in their own table
+    (app/record_payloads.py STORED_IN_TABLE) and the column is empty; row.payload
+    rebuilds the record. (Reading the column returned no holidays at all.)"""
     out: set[str] = set()
-    for (payload,) in db.query(AppDataRecord.payload).filter(
+    for row in db.query(AppDataRecord).filter(
         AppDataRecord.company_id == company_id, AppDataRecord.collection == "hrHolidays",
     ).all():
         try:
-            rec = json.loads(payload or "{}")
+            rec = json.loads(row.payload or "{}")
         except (ValueError, TypeError):
             continue
         raw = str(rec.get("date") or rec.get("holiday_date") or "") if isinstance(rec, dict) else ""

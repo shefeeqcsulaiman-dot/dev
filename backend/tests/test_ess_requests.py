@@ -61,7 +61,7 @@ def test_cannot_cancel_started_approved_or_someone_elses_leave(client, db, auth_
     emp_a, ha = _ess_login(client, db, auth_headers, cid, "ESSREQ-L2", "essreq.l2")
     _emp_b, hb = _ess_login(client, db, auth_headers, cid, "ESSREQ-L3", "essreq.l3")
     d = (date.today() + timedelta(days=40)).isoformat()
-    leave_id = client.post("/api/v1/ess/leave", headers=ha, json={"leave_type": "Sick Leave", "start_date": d, "end_date": d}).json()["id"]
+    leave_id = client.post("/api/v1/ess/leave", headers=ha, json={"leave_type": "Sick Leave", "start_date": d, "end_date": d, "attachment": "data:image/png;base64,iVBORw0KGgo="}).json()["id"]
 
     # another employee can't touch it (404, not 403 -- don't reveal it exists)
     assert client.post(f"/api/v1/ess/leave/{leave_id}/cancel", headers=hb).status_code == 404

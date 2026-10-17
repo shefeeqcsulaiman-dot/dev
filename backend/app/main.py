@@ -258,6 +258,31 @@ def create_app() -> FastAPI:
         except Exception as exc:
             log.error("Startup DB init failed (app will still serve traffic): %s", exc)
         try:
+            # Once (schema_flags): recount this year's leave requests with the 2026-10-17 day
+            # rules (working days skip weekend, holidays, rota days off; each leave type's own
+            # basis). A startup task, not a migration: it reads app data through the app's code.
+            from datetime import date as _date
+
+            from app.models import LeaveRequest
+            from app.routers.leave import recount_leave_requests
+            with SessionLocal() as db:
+                db.execute(text("CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"))
+                db.commit()
+                if not db.execute(text("SELECT 1 FROM schema_flags WHERE name = 'leave_recount_2026_10'")).first():
+                    since = _date(_date.today().year, 1, 1)
+                    for (cid,) in db.query(LeaveRequest.company_id).filter(LeaveRequest.start_date >= since.isoformat()).distinct().all():
+                        try:
+                            changed = recount_leave_requests(db, cid, since)
+                            if changed:
+                                log.info("leave recount: %s requests changed for company %s", changed, cid)
+                        except Exception as exc:
+                            db.rollback()
+                            log.warning("leave recount skipped for company %s: %s", cid, exc)
+                    db.execute(text("INSERT INTO schema_flags (name) VALUES ('leave_recount_2026_10') ON CONFLICT (name) DO NOTHING"))
+                    db.commit()
+        except Exception as exc:
+            log.error("Leave recount failed: %s", exc)
+        try:
             from app.routers.hr_access import backfill_default_role_permissions, backfill_main_module_edit
             with SessionLocal() as db:
                 backfill_default_role_permissions(db)
@@ -329,7 +354,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-17.1"
+    BUILD = "2026-10-17.2"
     globals()["_LIVE_BUILD"] = BUILD
 
     def monitoring_sentry_on() -> bool:

@@ -709,6 +709,7 @@
               '<div class="leave-type">' + escHtml(l.leave_type) + '</div>' +
               '<div class="leave-dates">' + escHtml(l.start_date) + ' → ' + escHtml(l.end_date) + ' (' + escHtml(l.days) + ' day' + (l.days === 1 ? '' : 's') + ')</div>' +
               (l.reason ? '<div class="leave-reason">' + escHtml(l.reason) + '</div>' : '') +
+              (l.attachment_name ? '<div class="leave-reason"><button type="button" class="link-btn" style="margin:0" onclick="essOpenLeaveAttachment(\'' + escHtml(l.id) + '\')">📎 ' + escHtml(l.attachment_name) + '</button></div>' : '') +
               (st === 'cancelled' && l.cancelled_by ? '<div class="leave-reason">Cancelled by ' + escHtml(l.cancelled_by) + (l.cancel_reason ? ' — ' + escHtml(l.cancel_reason) : '') + '</div>' : '') +
               (l.can_cancel ? '<button class="link-btn danger" data-id="' + escHtml(l.id) + '" onclick="essCancelLeave(this.dataset.id)">' + (st === 'approved' ? 'Cancel leave' : 'Cancel request') + '</button>' : '') +
             '</div>' +
@@ -854,8 +855,61 @@
     if (wrap && !wrap.contains(e.target)) essToggleNotifPanel(false);
   });
 
+  // ── Sick note attachment: a camera photo (shrunk to 1600 px JPEG) or a PDF / image file ──
+  var _essLeaveAttachment = null;
+  function _renderLeaveAttach() {
+    var info = document.getElementById('leave-attach-info');
+    if (!info) return;
+    if (!_essLeaveAttachment) { info.innerHTML = '<span style="color:var(--text3)">Required for sick leave. JPG, PNG or PDF, up to 3 MB.</span>'; return; }
+    var a = _essLeaveAttachment;
+    var thumb = /^data:image\//.test(a.data) ? '<img src="' + a.data + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">' : '<span style="font-size:22px">📄</span>';
+    info.innerHTML = '<div style="display:flex;align-items:center;gap:10px">' + thumb + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.name) + '</span>' +
+      '<button type="button" class="link-btn" style="margin:0" onclick="essLeaveAttachClear()">Remove</button></div>';
+  }
+  function essLeaveAttachClear() { _essLeaveAttachment = null; _renderLeaveAttach(); }
+  function essLeaveAttach(input) {
+    var file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    var done = function(data, name) {
+      if (data.length > 4200000) { essToast('That file is too large (3 MB at most)'); return; }
+      _essLeaveAttachment = {data: data, name: name};
+      _renderLeaveAttach();
+    };
+    var reader = new FileReader();
+    if (file.type === 'application/pdf') {
+      reader.onload = function() { done(reader.result, file.name || 'sick-note.pdf'); };
+      reader.readAsDataURL(file);
+      return;
+    }
+    if (!/^image\//.test(file.type)) { essToast('Attach a photo or a PDF'); return; }
+    reader.onload = function() {
+      var img = new Image();
+      img.onload = function() {
+        var scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        done(c.toDataURL('image/jpeg', 0.82), (file.name || 'sick-note').replace(/\.[^.]+$/, '') + '.jpg');
+      };
+      img.onerror = function() { done(reader.result, file.name || 'sick-note.jpg'); };   // e.g. HEIC: send as is
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  async function essOpenLeaveAttachment(id) {
+    try {
+      var r = await fetch(apiBase() + '/ess/leave/' + encodeURIComponent(id) + '/attachment', {headers: essHeaders()});
+      if (!r.ok) { essToast('Could not open the attachment'); return; }
+      var url = URL.createObjectURL(await r.blob());
+      window.open(url, '_blank');
+      setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+    } catch (e) { essToast('Could not open the attachment'); }
+  }
+
   function essOpenLeaveModal(prefillDate) {
     document.getElementById('leave-form-err').style.display = 'none';
+    _essLeaveAttachment = null;
     document.getElementById('leave-type').value = 'Annual Leave';
     document.getElementById('leave-start').value = prefillDate || '';
     document.getElementById('leave-end').value = prefillDate || '';
@@ -875,11 +929,15 @@
     var end = document.getElementById('leave-end').value;
     var reason = document.getElementById('leave-reason').value;
     if (!start || !end) { err.textContent = 'Please choose both a start and end date.'; err.style.display = 'block'; return; }
+    var sick = type === 'Sick Leave';
+    if (sick && !_essLeaveAttachment) { err.textContent = 'Attach your sick note: take a photo or upload a file.'; err.style.display = 'block'; return; }
     btn.disabled = true; btn.textContent = 'Submitting…';
     try {
       var r = await fetch(apiBase() + '/ess/leave', {
         method: 'POST', headers: essHeaders(),
-        body: JSON.stringify({leave_type: type, start_date: start, end_date: end, reason: reason || null})
+        body: JSON.stringify({leave_type: type, start_date: start, end_date: end, reason: reason || null,
+                              attachment: sick && _essLeaveAttachment ? _essLeaveAttachment.data : null,
+                              attachment_name: sick && _essLeaveAttachment ? _essLeaveAttachment.name : null})
       });
       if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
@@ -1238,7 +1296,39 @@
       document.getElementById('tasks-content').classList.remove('loading');
       renderEssTasks();
       updateDashboard();
+      loadDepartmentTasks();
     } catch(e) { var tEl = document.getElementById('tasks-content'); tEl.classList.remove('loading'); tEl.innerHTML = '<div class="empty">Failed to load.</div>'; }
+  }
+
+  // ── My department's tasks (read-only): who has each one, its status and due date ──
+  async function loadDepartmentTasks() {
+    var box = document.getElementById('tasks-dept');
+    if (!box) return;
+    try {
+      var r = await fetch(apiBase() + '/ess/tasks/department', {headers: essHeaders()});
+      if (!r.ok) { box.innerHTML = ''; return; }
+      var rows = await r.json();
+      if (!rows.length) { box.innerHTML = ''; return; }
+      var today = _todayISO();
+      var tone = function(st) {
+        st = String(st || 'todo').toLowerCase().replace(/[\s-]+/g, '_');
+        if (st === 'done' || st === 'completed') return ['Done', 'var(--green)'];
+        if (st === 'in_progress') return ['In progress', 'var(--accent-text,#2563eb)'];
+        if (st === 'cancelled') return ['Cancelled', 'var(--text3)'];
+        return ['To do', 'var(--amber)'];
+      };
+      box.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:8px">My department\'s tasks <span style="font-weight:400;color:var(--text3);font-size:12px">· ' + rows.length + '</span></div>' +
+        '<div class="card" style="padding:4px 14px">' + rows.slice(0, 60).map(function(t) {
+          var s = tone(t.status);
+          var overdue = t.due_date && t.due_date < today && s[0] !== 'Done' && s[0] !== 'Cancelled';
+          return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+            '<div style="min-width:0;flex:1"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.title || 'Task') + (t.is_mine ? ' <span style="font-size:11px;color:var(--accent-text,#2563eb)">(you)</span>' : '') + '</div>' +
+              '<div style="font-size:11.5px;color:var(--text3)">' + escHtml(t.assigned_to_name || t.assignee_name || 'Unassigned') +
+                (t.due_date ? ' · due ' + escHtml(t.due_date) + (overdue ? ' <b style="color:var(--red)">overdue</b>' : '') : '') +
+                (t.priority ? ' · ' + escHtml(t.priority) : '') + '</div></div>' +
+            '<span style="font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;color:' + s[1] + ';background:color-mix(in srgb,' + s[1] + ' 12%,transparent)">' + s[0] + '</span></div>';
+        }).join('') + '</div>';
+    } catch (e) { box.innerHTML = ''; }
   }
 
   // ── Tasks page: priority filter pills, search, sort and one card per task ──
@@ -1924,24 +2014,37 @@
 
   // ── Leave form: live day count, balance and overlap check ──
   var _essLeaveBal = {};
+  var _essLeaveDays = {key: '', data: null};
   function essUpdateLeavePreview() {
     var el = document.getElementById('leave-preview');
     if (!el) return;
     var type = _rqVal('leave-type'), s = _rqVal('leave-start'), e = _rqVal('leave-end');
+    var attachBox = document.getElementById('leave-attach');
+    if (attachBox) { attachBox.style.display = type === 'Sick Leave' ? '' : 'none'; _renderLeaveAttach(); }
     if (!s || !e) { el.style.display = 'none'; return; }
     var days = Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1;
     var b = _essLeaveBal[type];
-    // Same count as the server (leave_request_days): a Working-basis annual policy skips Sat/Sun.
-    if (days >= 1 && b && b.basis === 'Working') {
-      days = 0;
-      for (var d = new Date(s + 'T00:00:00'); d <= new Date(e + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
-        if (d.getDay() !== 0 && d.getDay() !== 6) days++;
-      }
+    // The server's own count (GET /ess/leave/days): working-day leave skips the weekend,
+    // public holidays and the employee's rota days off. Fetched once per date choice.
+    var key = type + '|' + s + '|' + e, skipNote = '';
+    if (days >= 1 && _essLeaveDays.key === key && _essLeaveDays.data) {
+      days = _essLeaveDays.data.days;
+      var sk = _essLeaveDays.data.skipped || {}, parts = [];
+      if (sk.weekend) parts.push(sk.weekend + ' weekend');
+      if (sk.holiday) parts.push(sk.holiday + ' public holiday');
+      if (sk.day_off) parts.push(sk.day_off + ' day' + (sk.day_off === 1 ? '' : 's') + ' off');
+      if (parts.length) skipNote = ' (skips ' + parts.join(', ') + ')';
+    } else if (days >= 1 && _essLeaveDays.key !== key) {
+      _essLeaveDays = {key: key, data: null};
+      fetch(apiBase() + '/ess/leave/days?leave_type=' + encodeURIComponent(type) + '&start=' + s + '&end=' + e, {headers: essHeaders()})
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) { if (d && _essLeaveDays.key === key) { _essLeaveDays.data = d; essUpdateLeavePreview(); } })
+        .catch(function() {});
     }
     var html, warn = false;
     if (days < 1 && s > e) { html = 'The end date is before the start date.'; warn = true; }
     else {
-      html = '<b>' + days + ' day' + (days === 1 ? '' : 's') + '</b>';
+      html = '<b>' + days + ' day' + (days === 1 ? '' : 's') + '</b>' + escHtml(skipNote);
       // The balance shown is this year's; leave starting in another year is checked against that year.
       if (b && s.slice(0, 4) === String(new Date().getFullYear())) {
         html += ' · ' + escHtml(type) + ' balance: <b>' + b.remaining + '</b> of ' + b.entitlement + ' days left' + (b.pending ? ' (' + b.pending + ' on hold in pending requests)' : '');
@@ -2183,6 +2286,30 @@
   var _holidayCalMonth = null; // 'YYYY-MM', the month the grid is currently showing
   var _holidayCalLeaveCache = {}; // month -> team leave rows, so paging back and forth doesn't re-fetch
 
+  // Leave tab: the upcoming holidays as a list -- date, holiday and HR's message.
+  function renderUpcomingHolidayList() {
+    var card = document.getElementById('holiday-calendar-card');
+    if (!card || !_essHolidaysCache) return;
+    var box = document.getElementById('holiday-upcoming-list');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'holiday-upcoming-list';
+      box.style.cssText = 'margin-top:14px;border-top:1px solid var(--border);padding-top:12px';
+      card.appendChild(box);
+    }
+    var todayStr = _todayISO();
+    var rows = _essHolidaysCache.filter(function(h) { return h.date >= todayStr; }).slice(0, 8);
+    if (!rows.length) { box.innerHTML = '<div class="hint" style="margin:0">No upcoming holidays.</div>'; return; }
+    box.innerHTML = '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">Upcoming holidays</div>' + rows.map(function(h) {
+      var dt = new Date(h.date + 'T00:00:00');
+      return '<div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+        '<div style="min-width:50px;text-align:center;border-radius:8px;background:#1e3a8a;color:#fff;padding:4px 0;line-height:1.15">' +
+          '<div style="font-size:15px;font-weight:700">' + dt.getDate() + '</div><div style="font-size:10.5px;opacity:.85">' + dt.toLocaleDateString('en-GB', {month: 'short'}) + '</div></div>' +
+        '<div style="min-width:0;flex:1"><div style="font-weight:600">' + escHtml(h.name) + ' <span style="font-weight:400;font-size:11.5px;color:var(--text3)">· ' + dt.toLocaleDateString('en-GB', {weekday: 'long'}) + '</span></div>' +
+          (h.message ? '<div style="font-size:12.5px;color:var(--text2);margin-top:2px">' + escHtml(h.message) + '</div>' : '') + '</div></div>';
+    }).join('');
+  }
+
   async function loadHolidayCalendar() {
     var grid = document.getElementById('holiday-cal-grid');
     var nextHolidayEl = document.getElementById('dash-next-holiday');
@@ -2200,12 +2327,13 @@
         var upcoming = _essHolidaysCache.filter(function(h) { return h.date >= todayStr; })[0];
         if (upcoming) {
           var upLabel = new Date(upcoming.date + 'T00:00:00').toLocaleDateString('en-US', {day: '2-digit', month: 'short'});
-          nextHolidayEl.textContent = 'Next holiday: ' + upcoming.name + ' — ' + upLabel;
+          nextHolidayEl.textContent = 'Next holiday: ' + upcoming.name + ' — ' + upLabel + (upcoming.message ? ' · ' + upcoming.message : '');
         } else {
           nextHolidayEl.textContent = _essHolidaysCache.length ? 'No upcoming holidays' : 'No holidays configured yet';
         }
       }
       if (grid) await renderHolidayCalendarGrid();
+      renderUpcomingHolidayList();
     } catch(e) {
       if (grid) grid.innerHTML = '<div class="empty" style="padding:12px 0">Failed to load.</div>';
       if (nextHolidayEl) nextHolidayEl.textContent = 'Failed to load';

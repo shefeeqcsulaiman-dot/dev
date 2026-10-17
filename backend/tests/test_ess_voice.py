@@ -315,3 +315,11 @@ def test_transcribe_falls_back_when_model_is_refused(client, voice, monkeypatch)
     r = _post_audio(client, voice)
     assert r.status_code == 200 and r.json()["text"] == "fallback worked"
     assert models == ["gpt-4o-mini-transcribe", "whisper-1"]
+
+
+@pytest.fixture(autouse=True)
+def _full_year_entitlement(monkeypatch):
+    """These tests are about other rules: give the whole year's Annual Leave up front, as
+    before accrual (tests/test_leave_accrual.py covers accrual)."""
+    from app.routers import leave as _leave
+    monkeypatch.setattr(_leave, "accrued_days", lambda settings, yearly, join_date, on: yearly)

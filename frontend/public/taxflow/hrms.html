@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=64d6cc917d" as="style">
-<link rel="preload" href="src/app.js?v=3c6975694e" as="script">
+<link rel="preload" href="src/styles.css?v=e801bd4e79" as="style">
+<link rel="preload" href="src/app.js?v=988560a636" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=64d6cc917d">
+<link rel="stylesheet" href="src/styles.css?v=e801bd4e79">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -658,6 +658,12 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
       </div>
     </div>
   </div>
+</div>
+
+<!-- Upcoming holidays: date, holiday and the message to staff (hrHolidays) -->
+<div class="mb3-card" id="hrms-holiday-card" style="margin-bottom:14px">
+  <div class="hc-hd"><div class="hc-title">Upcoming Holidays</div><a class="hd-link" onclick="go('hrms-settings')" style="cursor:pointer;font-size:12px">Holiday Calendar</a></div>
+  <div id="hrms-holiday-list" style="font-size:13px;color:var(--text3)">Loading…</div>
 </div>
 
 <!-- ── ROW C: Recent Activity + Upcoming Leave (Dashboard redesign) ── -->
@@ -1858,7 +1864,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div class="card mb16">
       <div class="card-hd"><div class="card-title">Holiday Calendar</div><button class="btn btn-g btn-sm" onclick="addHoliday()">+ Add Holiday</button></div>
       <table class="tbl" data-delete-actions-bound="skip">
-        <thead><tr><th>Date</th><th>Holiday</th><th>Location</th><th>Paid</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Holiday</th><th>Message</th><th>Location</th><th>Paid</th><th>Status</th><th></th></tr></thead>
         <tbody id="holidays-tbody"></tbody>
       </table>
     </div>
@@ -2707,6 +2713,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div class="modal-sub">Add a public/company holiday to the calendar</div>
     <div class="fg"><label class="fl">Date <span style="color:var(--red)">*</span></label><input class="fi" type="date" id="holiday-date"></div>
     <div class="fg"><label class="fl">Holiday Name <span style="color:var(--red)">*</span></label><input class="fi" id="holiday-name" placeholder="e.g. Eid Al Fitr"></div>
+    <div class="fg"><label class="fl">Message to staff</label><textarea class="fi" id="holiday-message" rows="2" maxlength="500" placeholder="e.g. The office is closed. The warehouse on-call rota is published."></textarea></div>
     <div class="fr2">
       <div class="fg"><label class="fl">Applies To</label><input class="fi" id="holiday-location" placeholder="All branches"></div>
       <div class="fg"><label class="fl">Paid</label><select class="fi" id="holiday-paid"><option value="yes">Yes</option><option value="no">No</option></select></div>
@@ -2997,7 +3004,8 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
   <div class="modal"><div class="modal-title">Apply for Leave</div><div class="modal-sub">Submit leave request for approval</div>
     <div class="fg"><label class="fl">Employee</label><select class="fi" id="leave-employee"><option value="">— Select Employee —</option></select></div>
     <div class="fg"><label class="fl">Leave Type</label><select class="fi" id="leave-type"><option>Annual Leave</option><option>Sick Leave</option><option>Casual Leave</option><option>Emergency Leave</option><option>Maternity Leave</option><option>Paternity Leave</option><option>Unpaid Leave</option><option>Lieu Days</option><option>Hajj Leave</option><option>Work From Home</option></select></div>
-    <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" id="leave-from" type="date"></div><div class="fg"><label class="fl">To Date</label><input class="fi" id="leave-to" type="date"></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">From Date</label><input class="fi" id="leave-from" type="date" onchange="updateLeaveDaysPreview()"></div><div class="fg"><label class="fl">To Date</label><input class="fi" id="leave-to" type="date" onchange="updateLeaveDaysPreview()"></div></div>
+    <div id="leave-days-preview" style="display:none;font-size:12.5px;color:var(--text2);margin:-4px 0 10px"></div>
     <div class="fg"><label class="fl">Reason</label><textarea class="fi" id="leave-reason" rows="3"></textarea></div>
     <div class="modal-foot"><button class="btn btn-g" onclick="closeM('m-leave')">Cancel</button><button class="btn btn-p" onclick="saveLeaveRequest()">Submit Request</button></div>
   </div>
@@ -3294,7 +3302,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=3c6975694e" defer></script>
+<script src="src/app.js?v=988560a636" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

@@ -2089,6 +2089,11 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .rs-m-orange{background:rgba(249,115,22,.14);color:#c2410c;}
 .rs-m-blue{background:rgba(59,130,246,.14);color:#1d4ed8;}
 .rs-m-red{background:rgba(239,68,68,.14);color:#b91c1c;}
+/* Public holidays: dark blue on the Weekly and Monthly rota (2026-10-17). */
+.rs-m-navy{background:#1e3a8a;color:#fff;}
+.rs-pill-navy{background:#1e3a8a;color:#fff;}
+.rs-cell-navy .rs-pill{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rs-tinted.rs-cell-navy{background:rgba(30,58,138,.12);}
 .rs-m-leave{background:rgba(236,72,153,.13);color:#be185d;}
 .rs-m-off{background:var(--bg3);color:var(--text3);font-weight:600;}
 .rs-m-gray{background:var(--bg3);color:var(--text2);border:1px dashed var(--border);}

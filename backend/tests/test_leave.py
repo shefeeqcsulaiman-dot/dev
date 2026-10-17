@@ -14,6 +14,7 @@ HRMS audit:
   - an admin's day-count edit to a named policy in HR Settings > Leave
     Policy never reached the backend's entitlement enforcement at all.
 """
+import pytest
 import json
 from datetime import datetime, timezone
 
@@ -134,3 +135,11 @@ def test_leave_policy_admin_edit_overrides_backend_entitlement(client, db, auth_
     assert r.status_code == 200, r.text
     row = next(b for b in r.json() if b["employee_id"] == emp.id)
     assert row["annual_entitlement"] == 25
+
+
+@pytest.fixture(autouse=True)
+def _full_year_entitlement(monkeypatch):
+    """These tests are about other rules: give the whole year's Annual Leave up front, as
+    before accrual (tests/test_leave_accrual.py covers accrual)."""
+    from app.routers import leave as _leave
+    monkeypatch.setattr(_leave, "accrued_days", lambda settings, yearly, join_date, on: yearly)

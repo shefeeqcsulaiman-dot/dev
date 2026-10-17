@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, true
 from sqlalchemy.orm import Session
 
 from app.auth_principal import resolve_active_branch
@@ -199,6 +199,164 @@ def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
     return caps
 
 
+# ── Day counting and entitlement by policy (2026-10-17) ─────────────────────
+# Leave days: a request counts calendar days, or -- on a Working basis -- skips the
+# company's weekend (HR Rules > Weekend Policy), Holiday Calendar days and the employee's
+# rota days off. The basis is the employee's named policy for Annual Leave when one is
+# assigned, else the leave type's own Basis (HR Settings > Leave Types), else Calendar.
+# Entitlement: a policy's yearly days are earned by HR Settings > Accrual from the
+# employee's join date, within the leave year set by "Leave year start".
+
+def _leave_settings(db: Session, company_id: str) -> dict:
+    row = db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "hrLeavePolicy",
+        AppDataRecord.record_key == "leave-policy",
+    ).first()
+    if not row:
+        return {}
+    try:
+        data = json.loads(row.payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _leave_type_basis(settings: dict, leave_type: str) -> str | None:
+    for entry in settings.get("leave_types") or []:
+        if isinstance(entry, dict) and str(entry.get("type") or "").strip() == leave_type:
+            basis = str(entry.get("basis") or "").strip()
+            return basis if basis in ("Calendar", "Working") else None
+    return None
+
+
+def _parse_date(value) -> date | None:
+    try:
+        return date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return None
+
+
+def _employee_profiles(db: Session, company_id: str) -> dict[str, dict]:
+    """employee_no -> {"policy": str, "join_date": date | None} from the employees records."""
+    out: dict[str, dict] = {}
+    for row in db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id,
+                                              AppDataRecord.collection == "employees").all():
+        try:
+            data = json.loads(row.payload or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        emp_no = str(data.get("id") or data.get("employee_no") or "").strip()
+        if emp_no:
+            out[emp_no] = {"policy": str(data.get("leave_policy") or "").strip(),
+                           "join_date": _parse_date(data.get("join_date") or data.get("joining_date"))}
+    return out
+
+
+_MONTHS = {"January": 1, "April": 4, "July": 7, "October": 10}
+
+
+def _add_months(d: date, months: int) -> date:
+    y, m = divmod(d.month - 1 + months, 12)
+    return date(d.year + y, m + 1, min(d.day, 28) if d.day > 28 else d.day)
+
+
+def leave_year_window(settings: dict, join_date: date | None, on: date) -> tuple[date, date]:
+    """[start, end) of the leave year containing `on`: from "Leave year start" (a month, or
+    "Joining Date (rolling)" = each anniversary of the join date)."""
+    start_setting = str(settings.get("year_start") or "January")
+    if start_setting.startswith("Joining") and join_date:
+        anchor = join_date
+        years = on.year - anchor.year - ((on.month, on.day) < (anchor.month, anchor.day))
+        start = _add_months(anchor, 12 * max(0, years))
+        return start, _add_months(start, 12)
+    month = _MONTHS.get(start_setting, 1)
+    start = date(on.year if on.month >= month else on.year - 1, month, 1)
+    return start, _add_months(start, 12)
+
+
+def _months_between(a: date, b: date) -> int:
+    """Months a..b counting both ends' months (1 Aug..5 Oct = 3)."""
+    return (b.year - a.year) * 12 + (b.month - a.month) + 1
+
+
+def accrued_days(settings: dict, yearly_days: float, join_date: date | None, on: date) -> float:
+    """Days of a yearly entitlement earned by `on` in its leave year, per HR Settings >
+    Accrual: Monthly (1/12 earned at the start of each month of service), Quarterly (1/4
+    per quarter), or Upfront (the whole year, prorated by join date in the first year)."""
+    if yearly_days <= 0:
+        return 0.0
+    ws, we = leave_year_window(settings, join_date, on)
+    service_start = max(ws, join_date) if join_date else ws
+    if join_date and join_date > on:
+        return 0.0
+    accrual = str(settings.get("accrual") or "Monthly")
+    last_month = we - timedelta(days=1)
+    if accrual.startswith("Upfront"):
+        earned = yearly_days * _months_between(service_start, last_month) / 12
+    elif accrual.startswith("Quarterly"):
+        def quarter(d: date) -> int:
+            return ((d.year - ws.year) * 12 + d.month - ws.month) // 3
+        earned = yearly_days * (quarter(on) - quarter(service_start) + 1) / 4
+    else:
+        earned = yearly_days * _months_between(service_start, on) / 12
+    value = round(min(yearly_days, max(0.0, earned)) * 2) / 2   # to the half day
+    return int(value) if float(value).is_integer() else value
+
+
+def leave_basis(db: Session, company_id: str, employee_no: str, leave_type: str,
+                settings: dict | None = None, profiles: dict | None = None) -> str:
+    settings = settings if settings is not None else _leave_settings(db, company_id)
+    if leave_type == "Annual Leave":
+        profiles = profiles if profiles is not None else _employee_profiles(db, company_id)
+        policy = (profiles.get(employee_no) or {}).get("policy") or ""
+        if policy:
+            configs = _effective_leave_policy_configs(db, company_id)
+            if policy in configs:
+                return configs[policy]["basis"]
+            if policy in _DEFAULT_LEAVE_POLICY_BASIS:
+                return _DEFAULT_LEAVE_POLICY_BASIS[policy]
+    return _leave_type_basis(settings, leave_type) or "Calendar"
+
+
+def leave_day_breakdown(db: Session, company_id: str, employee_no: str, leave_type: str,
+                        start: date, end: date) -> dict:
+    """The days a request uses, and which days it skipped and why."""
+    basis = leave_basis(db, company_id, employee_no, leave_type)
+    total = (end - start).days + 1
+    if basis != "Working" or total <= 0:
+        return {"basis": basis, "days": max(0, total), "calendar_days": max(0, total), "skipped": {}}
+    from app.rota_days import rota_day_statuses
+    from app.routers.attendance import _holiday_dates, _weekend_day_set
+    weekend = _weekend_day_set(db, company_id)              # JS getDay numbers, None = no weekend
+    holidays = _holiday_dates(db, company_id)
+    rota = rota_day_statuses(db, company_id, [employee_no], start, end)
+    skipped = {"weekend": 0, "holiday": 0, "day_off": 0}
+    days, d = 0, start
+    while d <= end:
+        iso = d.isoformat()
+        if iso in holidays or rota.get((employee_no, iso)) == "holiday":
+            skipped["holiday"] += 1
+        elif rota.get((employee_no, iso)) == "off":
+            skipped["day_off"] += 1
+        elif weekend is not None and (d.weekday() + 1) % 7 in weekend and (employee_no, iso) not in rota:
+            # a rota shift on a weekend day is a working day for that employee
+            skipped["weekend"] += 1
+        else:
+            days += 1
+        d += timedelta(days=1)
+    return {"basis": basis, "days": days, "calendar_days": total, "skipped": {k: v for k, v in skipped.items() if v}}
+
+
+def leave_window_for(db: Session, company_id: str, employee_no: str, on: date,
+                     settings: dict | None = None, profiles: dict | None = None) -> tuple[str, str]:
+    settings = settings if settings is not None else _leave_settings(db, company_id)
+    profiles = profiles if profiles is not None else _employee_profiles(db, company_id)
+    ws, we = leave_year_window(settings, (profiles.get(employee_no) or {}).get("join_date"), on)
+    return ws.isoformat(), we.isoformat()
+
+
 def inactive_leave_types(db: Session, company_id: str) -> set[str]:
     """Leave types switched off (Status = Inactive) in HR Settings > Leave Policy > Leave
     Types: new requests for them are refused. Existing requests and history are untouched."""
@@ -243,6 +401,7 @@ class LeaveRequestOut(BaseModel):
     cancelled_at: str | None = None
     cancelled_by: str | None = None
     cancel_reason: str | None = None
+    attachment_name: str | None = None
 
 
 def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
@@ -253,7 +412,39 @@ def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
         created_at=r.created_at.isoformat() if r.created_at else None,
         cancelled_at=r.cancelled_at.isoformat() if r.cancelled_at else None,
         cancelled_by=r.cancelled_by, cancel_reason=r.cancel_reason,
+        attachment_name=r.attachment_name,
     )
+
+
+ATTACHMENT_MAX_CHARS = 4_200_000   # a data URL of about 3 MB
+_ATTACHMENT_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
+
+
+def checked_attachment(data_url: str | None, name: str | None) -> tuple[str | None, str | None]:
+    """(data URL, file name) of an attachment, or (None, None); 400 for a wrong type or size."""
+    if not data_url:
+        return None, None
+    import re
+    m = re.match(r"^data:([\w/+.-]+);base64,", data_url)
+    if not m or m.group(1).lower() not in _ATTACHMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Attach a photo (JPG, PNG) or a PDF")
+    if len(data_url) > ATTACHMENT_MAX_CHARS:
+        raise HTTPException(status_code=400, detail="The attachment is too large (3 MB at most)")
+    return data_url, (str(name or "").strip()[:200] or ("attachment.pdf" if "pdf" in m.group(1) else "photo.jpg"))
+
+
+def attachment_response(req: LeaveRequest):
+    """The attachment as a file download (inline), or 404."""
+    import base64
+    import re
+
+    from fastapi.responses import Response
+    m = re.match(r"^data:([\w/+.-]+);base64,(.*)$", req.attachment or "", re.S)
+    if not m:
+        raise HTTPException(status_code=404, detail="No attachment")
+    safe = re.sub(r'[^A-Za-z0-9._ -]', "_", req.attachment_name or "attachment")
+    return Response(content=base64.b64decode(m.group(2)), media_type=m.group(1),
+                    headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "private, no-store"})
 
 
 class LeaveCancelIn(BaseModel):
@@ -388,6 +579,13 @@ def _set_approver(req: LeaveRequest, principal: Principal) -> None:
         req.approved_by_employee_id = principal.employee.id
 
 
+@router.get("/requests/{request_id}/attachment")
+def leave_request_attachment(request_id: str, db: Session = Depends(get_db),
+                             principal: Principal = Depends(require_principal_permission("leave:view"))):
+    """The sick note / photo the employee attached in ESS."""
+    return attachment_response(_get_request(db, request_id, principal))
+
+
 @router.post("/requests/{request_id}/approve", response_model=LeaveRequestOut)
 def approve_leave_request(
     request_id: str,
@@ -427,26 +625,18 @@ def approve_leave_request(
     # _leave_type_caps() instead, matching how the Leave Types settings
     # screen actually presents them (one cap per type, not per policy).
     if req.leave_type not in _UNCAPPED_LEAVE_TYPES:
-        type_caps = _leave_type_caps(db, principal.company_id)
-        if req.leave_type == "Annual Leave":
-            policies = _employee_leave_policies(db, principal.company_id)
-            emp_for_policy = db.query(Employee).filter(Employee.id == req.employee_id).first()
-            configs = _effective_leave_policy_configs(db, principal.company_id)
-            entitlement = _leave_entitlement_days(
-                emp_for_policy.employee_no if emp_for_policy else "", policies, configs,
-                default_days=type_caps.get("Annual Leave", 21),
-            )
-        else:
-            entitlement = type_caps.get(req.leave_type)
+        emp_for_policy = db.query(Employee).filter(Employee.id == req.employee_id).first()
+        emp_no = emp_for_policy.employee_no if emp_for_policy else ""
+        start_day = date.fromisoformat(req.start_date[:10])
+        # Earned by the leave's start date, in the leave year it starts in.
+        entitlement = leave_entitlement(db, principal.company_id, emp_no, req.leave_type, on=start_day)
         if entitlement is not None:
-            # Against the year the leave starts in, not the current year (January leave
-            # approved in December used to be checked against this year's usage).
             used = _used_days_for_type(db, principal.company_id, req.employee_id, req.leave_type, exclude_request_id=req.id,
-                                       year=int(req.start_date[:4]))
+                                       window=leave_window_for(db, principal.company_id, emp_no, start_day))
             if used + req.days > entitlement:
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Approving this would use {used + req.days} days against a {entitlement}-day entitlement ({entitlement - used} remaining)",
+                    detail=f"Approving this would use {used + req.days} days against {_fmt_days(entitlement)} earned by {start_day.isoformat()} ({_fmt_days(max(0, entitlement - used))} remaining)",
                 )
 
     req.status = "approved"
@@ -532,6 +722,7 @@ def _year_bounds(year: int | None) -> tuple[str, str]:
 def _used_days_for_type(
     db: Session, company_id: str, employee_id: str, leave_type: str, exclude_request_id: str | None = None,
     *, year: int | None = None, statuses: tuple[str, ...] = ("approved",),
+    window: tuple[str, str] | None = None,
 ) -> int:
     # Attributed entirely to the year the request STARTS in (a request
     # spanning a year boundary, e.g. 28 Dec - 5 Jan, counts fully against
@@ -542,7 +733,8 @@ def _used_days_for_type(
     # year's balance forever. `year` defaults to this year; pass the year a
     # request starts in to check it against that year's balance.
     # statuses=("pending",) gives the days on hold for requests not yet decided.
-    year_start, year_end = _year_bounds(year)
+    # window=(start, end) uses that leave year instead (leave_window_for()).
+    year_start, year_end = window or _year_bounds(year)
     query = db.query(LeaveRequest).filter(
         LeaveRequest.company_id == company_id,
         LeaveRequest.employee_id == employee_id,
@@ -559,6 +751,7 @@ def _used_days_for_type(
 def _used_days_by_employee_and_type(
     db: Session, company_id: str, employee_id: str | None = None,
     *, year: int | None = None, statuses: tuple[str, ...] = ("approved",),
+    window: tuple[str, str] | None = None,
 ) -> dict[tuple[str, str], int]:
     """Approved leave days used this calendar year, grouped by (employee_id,
     leave_type) in ONE query -- exactly the same filter and year rule as
@@ -566,7 +759,7 @@ def _used_days_by_employee_and_type(
     is what the balance screens used to call once per employee per leave type
     (1,200+ queries for a 200-employee company). Pass employee_id to limit it
     to one employee; statuses=("pending",) for the days still waiting on a decision."""
-    year_start, year_end = _year_bounds(year)
+    year_start, year_end = window or _year_bounds(year)
     query = db.query(LeaveRequest.employee_id, LeaveRequest.leave_type, func.sum(LeaveRequest.days)).filter(
         LeaveRequest.company_id == company_id,
         LeaveRequest.status.in_(statuses),
@@ -583,35 +776,33 @@ def _annual_used_days(db: Session, company_id: str, employee_id: str, exclude_re
 
 
 def leave_request_days(db: Session, company_id: str, employee_no: str, leave_type: str, start: date, end: date) -> int:
-    """Days a request uses: calendar days, except Annual Leave under a Working-basis
-    policy, which skips weekends. Shared by HRMS and ESS so the same dates always
-    cost the same number of days (ESS used to count every calendar day)."""
-    if leave_type == "Annual Leave":
-        policy_name = _employee_leave_policies(db, company_id).get(employee_no, "")
-        configs = _effective_leave_policy_configs(db, company_id)
-        basis = configs.get(policy_name, {}).get("basis", _DEFAULT_LEAVE_POLICY_BASIS.get(policy_name, "Calendar"))
-        if basis == "Working":
-            return _working_days_count(start, end)
-    return (end - start).days + 1
+    """Days a request uses (leave_day_breakdown()). Shared by HRMS and ESS so the same dates
+    always cost the same number of days."""
+    return leave_day_breakdown(db, company_id, employee_no, leave_type, start, end)["days"]
 
 
 def annual_leave_basis(db: Session, company_id: str, employee_no: str) -> str:
-    policy_name = _employee_leave_policies(db, company_id).get(employee_no, "")
-    configs = _effective_leave_policy_configs(db, company_id)
-    return configs.get(policy_name, {}).get("basis", _DEFAULT_LEAVE_POLICY_BASIS.get(policy_name, "Calendar"))
+    return leave_basis(db, company_id, employee_no, "Annual Leave")
 
 
-def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type: str) -> int | None:
-    """This employee's yearly entitlement for a leave type; None = not capped
-    (Unpaid Leave, Work From Home, and any type without a configured cap)."""
+def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type: str,
+                      on: date | None = None) -> float | None:
+    """This employee's entitlement for a leave type in the leave year containing `on`
+    (default today); None = not capped (Unpaid Leave, Work From Home, any type without a
+    cap). Annual Leave: the policy's yearly days, earned by the Accrual setting from the
+    join date (accrued_days()). Other capped types (Sick, Emergency, ...) are statutory or
+    per-event allowances and are not accrued."""
     if leave_type in _UNCAPPED_LEAVE_TYPES:
         return None
     caps = _leave_type_caps(db, company_id)
     if leave_type == "Annual Leave":
-        return _leave_entitlement_days(
-            employee_no, _employee_leave_policies(db, company_id), _effective_leave_policy_configs(db, company_id),
-            default_days=caps.get("Annual Leave", 21),
+        profiles = _employee_profiles(db, company_id)
+        yearly = _leave_entitlement_days(
+            employee_no, {k: v["policy"] for k, v in profiles.items() if v["policy"]},
+            _effective_leave_policy_configs(db, company_id), default_days=caps.get("Annual Leave", 21),
         )
+        return accrued_days(_leave_settings(db, company_id), yearly,
+                            (profiles.get(employee_no) or {}).get("join_date"), on or date.today())
     return caps.get(leave_type)
 
 
@@ -619,18 +810,42 @@ def assert_leave_available(db: Session, company_id: str, employee: Employee, lea
     """A new request must fit in what's left for the year it starts in, counting
     pending requests as already on hold -- otherwise several pending requests could
     each pass on their own and add up to more than the entitlement."""
-    entitlement = leave_entitlement(db, company_id, employee.employee_no, leave_type)
+    if days <= 0:
+        raise HTTPException(status_code=400, detail="These dates are all weekend, public holiday or rota days off: no leave days to request")
+    entitlement = leave_entitlement(db, company_id, employee.employee_no, leave_type, on=start)
     if entitlement is None:
         return
-    taken = _used_days_for_type(db, company_id, employee.id, leave_type, year=start.year, statuses=("approved",))
-    pending = _used_days_for_type(db, company_id, employee.id, leave_type, year=start.year, statuses=("pending",))
+    window = leave_window_for(db, company_id, employee.employee_no, start)
+    taken = _used_days_for_type(db, company_id, employee.id, leave_type, window=window, statuses=("approved",))
+    pending = _used_days_for_type(db, company_id, employee.id, leave_type, window=window, statuses=("pending",))
     available = max(0, entitlement - taken - pending)
     if days > available:
         on_hold = f" ({pending} more on hold in pending requests)" if pending else ""
         raise HTTPException(
             status_code=400,
-            detail=f"Only {available} day(s) of {leave_type} available for {start.year}{on_hold}; this request is {days}",
+            detail=f"Only {_fmt_days(available)} day(s) of {leave_type} available by {start.isoformat()}{on_hold}; this request is {days}",
         )
+
+
+def _fmt_days(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else f"{value:.1f}"
+
+
+@router.get("/days")
+def leave_days_preview(
+    employee_id: str = Query(...), leave_type: str = Query(...), start: date = Query(...), end: date = Query(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("leave:view")),
+) -> dict:
+    """How many days a request for these dates would use for this employee, and which
+    days it skips -- the count the request will get (leave_day_breakdown())."""
+    emp = db.query(Employee).filter(Employee.company_id == principal.company_id, Employee.id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, emp)
+    if end < start:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    return leave_day_breakdown(db, principal.company_id, emp.employee_no, leave_type, start, end)
 
 
 @router.get("/balance")
@@ -656,26 +871,27 @@ def leave_balance(
     if resolved_branch_id:
         employee_query = employee_query.filter((Employee.branch_id == resolved_branch_id) | (Employee.branch_id.is_(None)))
     employees = scope_employee_query(employee_query, principal).all()
-    policies = _employee_leave_policies(db, principal.company_id)
-    configs = _effective_leave_policy_configs(db, principal.company_id)
+    balances = leave_balances(db, principal.company_id, employees)
     caps = _leave_type_caps(db, principal.company_id)
     result = []
-    used_map = _used_days_by_employee_and_type(db, principal.company_id)   # one grouped query, not employees x leave types
-    pending_map = _used_days_by_employee_and_type(db, principal.company_id, statuses=("pending",))
     for e in employees:
-        annual_entitlement = _leave_entitlement_days(e.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
-        annual_used = used_map.get((e.id, "Annual Leave"), 0)
-        annual_pending = pending_map.get((e.id, "Annual Leave"), 0)
+        b = balances[e.id]
+        annual = b["Annual Leave"]
+        annual_entitlement, annual_used, annual_pending = annual["entitlement"], annual["used"], annual["pending"]
         by_type = {}
-        for leave_type, cap in caps.items():
-            used = annual_used if leave_type == "Annual Leave" else used_map.get((e.id, leave_type), 0)
-            pending = pending_map.get((e.id, leave_type), 0)
-            by_type[leave_type] = {"entitlement": cap, "used": used, "pending": pending, "remaining": max(0, cap - used),
-                                   "available": max(0, cap - used - pending)}
+        for leave_type in caps:
+            t = b[leave_type]
+            by_type[leave_type] = {"entitlement": t["entitlement"], "used": t["used"], "pending": t["pending"],
+                                   "remaining": max(0, t["entitlement"] - t["used"]),
+                                   "available": max(0, t["entitlement"] - t["used"] - t["pending"]),
+                                   "basis": t["basis"]}
+        by_type["Annual Leave"]["yearly_entitlement"] = annual["yearly_entitlement"]
         # remaining = entitlement - approved; available also takes off pending requests (on hold).
         result.append({
             "employee_id": e.id, "employee_name": e.full_name,
             "annual_entitlement": annual_entitlement,
+            "annual_yearly_entitlement": annual["yearly_entitlement"],
+            "leave_year": annual["leave_year"],
             "used": annual_used,
             "pending": annual_pending,
             "remaining": max(0, annual_entitlement - annual_used),
@@ -683,3 +899,66 @@ def leave_balance(
             "by_type": by_type,
         })
     return result
+
+
+def leave_balances(db: Session, company_id: str, employees: list[Employee], on: date | None = None) -> dict[str, dict]:
+    """{employee.id: {leave_type: {entitlement, yearly_entitlement, used, pending, basis,
+    leave_year}}} for every capped type, each in the employee's own leave year containing
+    `on` (default today); Annual Leave accrued by policy (leave_entitlement())."""
+    on = on or date.today()
+    settings = _leave_settings(db, company_id)
+    profiles = _employee_profiles(db, company_id)
+    configs = _effective_leave_policy_configs(db, company_id)
+    caps = _leave_type_caps(db, company_id)
+    policies = {k: v["policy"] for k, v in profiles.items() if v["policy"]}
+    windows = {e.id: leave_window_for(db, company_id, e.employee_no, on, settings, profiles) for e in employees}
+    earliest = min((w[0] for w in windows.values()), default=on.isoformat())
+    rows = db.query(LeaveRequest.employee_id, LeaveRequest.leave_type, LeaveRequest.start_date, LeaveRequest.days,
+                    LeaveRequest.status).filter(
+        LeaveRequest.company_id == company_id, LeaveRequest.status.in_(("approved", "pending")),
+        LeaveRequest.start_date >= earliest,
+        LeaveRequest.employee_id.in_(list(windows)) if len(windows) <= 500 else true(),
+    ).all()
+    used: dict[tuple[str, str, str], int] = {}
+    for emp_id, leave_type, start_date, days, status in rows:
+        w = windows.get(emp_id)
+        if w and w[0] <= str(start_date) < w[1]:
+            used[(emp_id, leave_type, status)] = used.get((emp_id, leave_type, status), 0) + int(days or 0)
+    out: dict[str, dict] = {}
+    for e in employees:
+        prof = profiles.get(e.employee_no) or {}
+        yearly = _leave_entitlement_days(e.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
+        entry = {}
+        for leave_type, cap in caps.items():
+            if leave_type == "Annual Leave":
+                ent, year_ent = accrued_days(settings, yearly, prof.get("join_date"), on), yearly
+            else:
+                ent, year_ent = cap, cap
+            entry[leave_type] = {
+                "entitlement": ent, "yearly_entitlement": year_ent,
+                "used": used.get((e.id, leave_type, "approved"), 0), "pending": used.get((e.id, leave_type, "pending"), 0),
+                "basis": leave_basis(db, company_id, e.employee_no, leave_type, settings, profiles),
+                "leave_year": {"start": windows[e.id][0], "end": windows[e.id][1]},
+            }
+        out[e.id] = entry
+    return out
+
+
+def recount_leave_requests(db: Session, company_id: str, since: date) -> int:
+    """Recount the days of approved and pending requests starting on/after `since` with the
+    current rules (leave_day_breakdown()). Returns how many changed."""
+    changed = 0
+    emp_nos = {e.id: e.employee_no for e in db.query(Employee).filter(Employee.company_id == company_id).all()}
+    for req in db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id,
+                                             LeaveRequest.status.in_(("approved", "pending")),
+                                             LeaveRequest.start_date >= since.isoformat()).all():
+        start, end = _parse_date(req.start_date), _parse_date(req.end_date)
+        emp_no = emp_nos.get(req.employee_id)
+        if not (start and end and emp_no):
+            continue
+        days = leave_request_days(db, company_id, emp_no, req.leave_type, start, end)
+        if days != req.days and days > 0:
+            req.days = days
+            changed += 1
+    db.commit()
+    return changed

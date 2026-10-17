@@ -19250,6 +19250,7 @@ function leaveEntitlementDays(policy){
 }
 
 function refreshHrmsDashboard(){
+  if(typeof renderHrmsHolidayCard==='function')renderHrmsHolidayCard();
   const CIRC=238.76; // 2π × r=38
   const DEPT_COLORS=['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4','#e879f9','#f97316'];
   const TYPE_COLORS={'Full-Time':'#3b82f6','Part-Time':'#8b5cf6','Contract':'#f59e0b','Daily Wage':'#10b981','Hourly':'#06b6d4','Others':'#d1d5db'};
@@ -19522,7 +19523,7 @@ function renderLeaveTable(){
       ?`Cancelled${rec.cancelled_by?' by '+rec.cancelled_by:''}${rec.cancelled_at?' on '+rec.cancelled_at.slice(0,10):''}${rec.cancel_reason?' — '+rec.cancel_reason:''}`:'';
     return `<tr data-record-id="${id}">
       <td>${escapeHtml(rec.employee_name)}</td>
-      <td><span class="b ${typeCls}">${escapeHtml(rec.leave_type?.replace(' Leave','')||rec.leave_type)}</span></td>
+      <td><span class="b ${typeCls}">${escapeHtml(rec.leave_type?.replace(' Leave','')||rec.leave_type)}</span>${rec.attachment_name?` <button type="button" class="btn btn-g btn-sm" style="padding:2px 6px" onclick="openLeaveAttachment('${id}')" title="Sick note: ${escapeHtml(rec.attachment_name)}">📎</button>`:''}</td>
       <td>${escapeHtml(rec.start_date)}</td>
       <td>${escapeHtml(rec.end_date)}</td>
       <td>${rec.days||'—'}</td>
@@ -19531,6 +19532,17 @@ function renderLeaveTable(){
     </tr>`;
   }).join('');
   renderLeaveCalendar();
+}
+
+// The sick note / photo the employee attached in ESS (GET /leave/requests/{id}/attachment).
+async function openLeaveAttachment(id){
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/leave/requests/${encodeURIComponent(id)}/attachment`);
+    if(!r.ok){toast('Could not open the attachment','err');return;}
+    const url=URL.createObjectURL(await r.blob());
+    window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){toast('Could not open the attachment','err');}
 }
 
 async function approveLeave(id){
@@ -19576,6 +19588,35 @@ async function cancelLeave(id){
     }else{const d=await r.json().catch(()=>({}));toast(d.detail||'Failed to cancel','err');}
   }catch(e){toast('Cannot reach server','err');}
 }
+
+// Live count for the HRMS leave form: the server's own rule (GET /leave/days): working-day
+// leave skips the weekend, public holidays and the employee's rota days off.
+let _leaveDaysSeq=0;
+function _leaveSkipText(skipped){
+  const parts=[];
+  if(skipped?.weekend)parts.push(`${skipped.weekend} weekend`);
+  if(skipped?.holiday)parts.push(`${skipped.holiday} public holiday`);
+  if(skipped?.day_off)parts.push(`${skipped.day_off} day${skipped.day_off===1?'':'s'} off`);
+  return parts.length?` (skips ${parts.join(', ')})`:'';
+}
+async function updateLeaveDaysPreview(){
+  const el=document.getElementById('leave-days-preview');
+  if(!el)return;
+  const employeeId=document.getElementById('leave-employee')?.value||'';
+  const leaveType=document.getElementById('leave-type')?.value||'';
+  const from=document.getElementById('leave-from')?.value||'';
+  const to=document.getElementById('leave-to')?.value||'';
+  if(!employeeId||!from||!to||to<from){el.style.display='none';return;}
+  const seq=++_leaveDaysSeq;
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/leave/days?employee_id=${encodeURIComponent(employeeId)}&leave_type=${encodeURIComponent(leaveType)}&start=${from}&end=${to}`);
+    if(seq!==_leaveDaysSeq||!r.ok)return;
+    const d=await r.json();
+    el.innerHTML=`<b>${d.days} day${d.days===1?'':'s'}</b> of ${escapeHtml(leaveType)} · ${d.basis==='Working'?'working days':'calendar days'}${escapeHtml(_leaveSkipText(d.skipped))}`;
+    el.style.display='block';
+  }catch(e){/* the request itself still shows the server's answer */}
+}
+document.addEventListener('change',e=>{if(e.target&&(e.target.id==='leave-employee'||e.target.id==='leave-type'))updateLeaveDaysPreview();});
 
 async function saveLeaveRequest(){
   const employeeId=document.getElementById('leave-employee')?.value||'';
@@ -22686,6 +22727,13 @@ function filteredRotaStaff(scope='week'){
 
 function assignmentFor(staff,date,day){
   const existing=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
+  // A Holiday Calendar day the employee isn't working shows as that holiday (dark blue).
+  const holiday=_companyHolidayMap().get(date);
+  if(holiday&&(!existing||String(existing.code||'').toUpperCase()==='OFF')){
+    return {...(existing||{}),id:rotaAssignmentId(staff.id,date),employee_id:staff.id,employee_name:staff.name,role:staff.role,
+      department:staff.department,location:staff.location,date,day,type:'Holiday',code:'PH',start:'',end:'',mark:'Holiday',
+      className:'holiday',holiday_name:holiday};
+  }
   if(existing)return existing;
   return normalizeRotaAssignment({
     id:rotaAssignmentId(staff.id,date),
@@ -22927,7 +22975,7 @@ function rotaWeekCellHtml(assignment,{tinted=false}={}){
     return `<span class="rs-cell rs-cell-leave${tint}"><span class="rs-leave-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Leave</span><small>Full day</small>${taskRow}</span>`;
   }
   let pill='Working',tone='green';
-  if(code==='PH'||mark==='Holiday'){pill='Holiday';tone='red';}
+  if(code==='PH'||mark==='Holiday'){pill=assignment?.holiday_name?escapeHtml(assignment.holiday_name):'Holiday';tone='navy';}
   else if(code==='TR'||mark==='Training'){pill='Training';tone='blue';}
   else if(code==='OT'||mark==='OT'||assignment?.className==='overtime'){pill='Overtime';tone='orange';}
   else if(code==='N'||assignment?.className==='night'){pill='Night';tone='indigo';}
@@ -23137,7 +23185,7 @@ function downloadRotaMonthWeekPdf(){
   const th='padding:4px 1px;font-size:8px;font-weight:700;color:#fff;text-align:center';
   const dayHeaders=dates.map((d,i)=>{
     const di=dayIdx(d);
-    const bg=dayHolidays[i]?'#7f1d1d':di>=5?'#334155':'#1e293b';
+    const bg=dayHolidays[i]?'#1e3a8a':di>=5?'#334155':'#1e293b';
     return `<th style="${th};background:${bg}" title="${escapeHtml(dayHolidays[i])}">${Number(d.slice(8,10))}<br><span style="font-weight:400;opacity:.75">${ROTA_MONTH_DAY_SHORT[di]}</span></th>`;
   }).join('');
   const bodyRows=rows.map((r,ri)=>{
@@ -23189,7 +23237,7 @@ function rotaMonthCellHtml(assignment){
   let tone='green',text=code;
   if(code==='OFF'){tone='off';text='OFF';}
   else if(code==='L'||mark==='Leave'){tone='leave';text='L';}
-  else if(code==='PH'||mark==='Holiday'){tone='red';text='PH';}
+  else if(code==='PH'||mark==='Holiday'){tone='navy';text='PH';}
   else if(code==='TR'||mark==='Training'){tone='blue';}
   else if(code==='OT'||mark==='OT'||assignment?.className==='overtime'){tone='orange';}
   else if(code==='N'||assignment?.className==='night'){tone='indigo';}
@@ -23267,7 +23315,7 @@ function renderMonthlyRotaBoard(){
     }).join('');
     return `<tr><th scope="row" class="rs-mg-staff"><span class="rs-mg-name">${escapeHtml(staff.name)}</span><span class="rs-mg-sub">${escapeHtml(staff.department)}${staff.role?` · ${escapeHtml(staff.role)}`:''}</span></th>${cells}<td class="rs-mg-total">${total.toFixed(1)}</td></tr>`;
   }).join('');
-  const legend=`<div class="rs-mg-legend">${[['green','M / E','Working'],['indigo','N','Night'],['orange','OT','Overtime'],['blue','TR','Training'],['red','PH','Holiday'],['leave','L','Leave'],['off','OFF','Day off'],['gray','','Draft']].map(([t,c,l])=>`<span><i class="rs-m-cell rs-m-${t}">${c||'·'}</i>${l}</span>`).join('')}</div>`;
+  const legend=`<div class="rs-mg-legend">${[['green','M / E','Working'],['indigo','N','Night'],['orange','OT','Overtime'],['blue','TR','Training'],['navy','PH','Holiday'],['leave','L','Leave'],['off','OFF','Day off'],['gray','','Draft']].map(([t,c,l])=>`<span><i class="rs-m-cell rs-m-${t}">${c||'·'}</i>${l}</span>`).join('')}</div>`;
   board.innerHTML=notice+`<div class="rs-mg-wrap"><table class="rs-mg"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`+legend;
 }
 
@@ -23944,7 +23992,7 @@ function _renderHolidayRow(rec){
   const existing=tbody.querySelector(`tr[data-holiday-id="${CSS.escape(rec.id)}"]`);
   const statusBadge=rec.status==='Planned'?'<span class="b b-a">Planned</span>':'<span class="b b-g">Active</span>';
   const paidBadge=rec.paid===false||rec.paid==='No'?'<span class="b" style="background:var(--bg3)">No</span>':'<span class="b b-g">Yes</span>';
-  const html=`<td>${escapeHtml(rec.display_date||rec.date||'')}</td><td>${escapeHtml(rec.name||'')}</td><td>${escapeHtml(rec.location||'All branches')}</td><td>${paidBadge}</td><td>${statusBadge}</td><td><button class="btn btn-g btn-xs" onclick="deleteHoliday('${escapeHtml(rec.id)}')">×</button></td>`;
+  const html=`<td>${escapeHtml(rec.display_date||rec.date||'')}</td><td>${escapeHtml(rec.name||'')}</td><td style="max-width:280px;color:var(--text2)">${escapeHtml(rec.message||'')}</td><td>${escapeHtml(rec.location||'All branches')}</td><td>${paidBadge}</td><td>${statusBadge}</td><td><button class="btn btn-g btn-xs" onclick="deleteHoliday('${escapeHtml(rec.id)}')">×</button></td>`;
   if(existing){existing.innerHTML=html;}
   else{
     removeEmptyState(tbody);
@@ -23970,6 +24018,8 @@ function addHoliday(){
   if(nameEl)nameEl.value='';
   if(locEl)locEl.value='All branches';
   if(paidEl)paidEl.value='yes';
+  const msgEl=document.getElementById('holiday-message');
+  if(msgEl)msgEl.value='';
   showM('m-add-holiday');
   setTimeout(()=>nameEl?.focus(),120);
 }
@@ -23984,7 +24034,8 @@ function confirmAddHoliday(){
   if(!name){toast('Holiday name is required','warn');return;}
   const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const display=`${String(parsed.getDate()).padStart(2,'0')} ${months[parsed.getMonth()]}`;
-  const rec={id:'holiday-'+Date.now(),date:isoDate,display_date:display,name,location,paid,status:'Active'};
+  const message=(document.getElementById('holiday-message')?.value||'').trim();
+  const rec={id:'holiday-'+Date.now(),date:isoDate,display_date:display,name,message,location,paid,status:'Active'};
   _renderHolidayRow(rec);
   saveServer('hrHolidays',rec);
   hideM('m-add-holiday');
@@ -23999,6 +24050,31 @@ function deleteHoliday(id){
   deleteServer('hrHolidays',{id});
 }
 
+// HRMS dashboard: the next holidays with their message to staff.
+async function renderHrmsHolidayCard(){
+  const el=document.getElementById('hrms-holiday-list');
+  if(!el)return;
+  try{
+    const r=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/hrHolidays?limit=200`);
+    const d=r.ok?await r.json():{records:[]};
+    const today=new Date();
+    const todayIso=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const rows=(d.records||[]).filter(h=>/^\d{4}-\d{2}-\d{2}$/.test(String(h.date||''))&&h.date>=todayIso)
+      .sort((a,b)=>a.date.localeCompare(b.date)).slice(0,6);
+    if(!rows.length){el.innerHTML='No upcoming holidays. Add them in HR Settings → Holiday Calendar.';return;}
+    el.innerHTML=rows.map(h=>{
+      const dt=new Date(h.date+'T00:00:00');
+      const days=Math.round((dt-new Date(todayIso+'T00:00:00'))/86400000);
+      const when=days===0?'Today':days===1?'Tomorrow':`in ${days} days`;
+      return `<div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--border2)">
+        <div style="min-width:54px;text-align:center;border-radius:8px;background:#1e3a8a;color:#fff;padding:4px 0;line-height:1.15">
+          <div style="font-size:16px;font-weight:700">${dt.getDate()}</div><div style="font-size:10.5px;opacity:.85">${dt.toLocaleDateString('en-GB',{month:'short'})}</div></div>
+        <div style="min-width:0;flex:1"><div style="font-weight:600;color:var(--text)">${escapeHtml(h.name||'Holiday')} <span style="font-weight:400;font-size:11.5px;color:var(--text3)">· ${dt.toLocaleDateString('en-GB',{weekday:'long'})} · ${when}</span></div>
+          ${h.message?`<div style="font-size:12.5px;color:var(--text2);margin-top:2px">${escapeHtml(h.message)}</div>`:''}</div></div>`;
+    }).join('');
+  }catch(e){el.textContent='Could not load holidays.';}
+}
+
 async function loadHolidaysFromServer(){
   try{
     const response=await authenticatedFetch(`${apiBaseUrl()}/app-data/records/hrHolidays?limit=200`);
@@ -24008,12 +24084,35 @@ async function loadHolidaysFromServer(){
     // clearStaticDemoData() already put the real "No holidays configured
     // yet" empty-state message in the table on page load; nothing to do
     // here when there's genuinely no company data.
+    _holidayRecords=records;
+    _holidayMapCache={at:0,map:null};
     if(!records.length)return;
     records.forEach(_renderHolidayRow);
   }catch(e){console.warn('Failed to load holidays:',e);}
 }
 
+// Holiday Calendar date -> name. Read from the Holidays table on the page; cached for a
+// few seconds because the rota boards ask once per cell.
+let _holidayMapCache={at:0,map:null};
+// The Holiday Calendar records (loadHolidaysFromServer()), with their exact dates. Loaded on
+// first use by the rota (the HR Settings table may never have been opened), which redraws.
+let _holidayRecords=null,_holidayRecordsLoading=false;
 function _companyHolidayMap(){
+  if(_holidayMapCache.map&&Date.now()-_holidayMapCache.at<3000)return _holidayMapCache.map;
+  if(_holidayRecords===null&&!_holidayRecordsLoading&&typeof loadHolidaysFromServer==='function'){
+    _holidayRecordsLoading=true;
+    loadHolidaysFromServer().finally(()=>{
+      _holidayRecordsLoading=false;
+      if(_holidayRecords===null)_holidayRecords=[];
+      if(typeof renderRotaBoards==='function')renderRotaBoards();
+    });
+  }
+  if(_holidayRecords&&_holidayRecords.length){
+    const fromRecords=new Map();
+    _holidayRecords.forEach(h=>{const d=String(h.date||'');if(/^\d{4}-\d{2}-\d{2}$/.test(d))fromRecords.set(d,h.name||'Holiday');});
+    _holidayMapCache={at:Date.now(),map:fromRecords};
+    return fromRecords;
+  }
   const map=new Map();
   const months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
   document.querySelectorAll('#holidays-tbody tr').forEach(row=>{
@@ -24026,10 +24125,12 @@ function _companyHolidayMap(){
     const monIdx=months[m[2]];
     if(monIdx===undefined)return;
     const thisYear=new Date().getFullYear();
+    // The local date itself: new Date(...).toISOString() is UTC, a day early in the UAE.
     [thisYear-1,thisYear,thisYear+1].forEach(y=>{
-      map.set(new Date(y,monIdx,day).toISOString().slice(0,10),name);
+      map.set(`${y}-${String(monIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,name);
     });
   });
+  _holidayMapCache={at:Date.now(),map};
   return map;
 }
 
@@ -24057,7 +24158,7 @@ function _rotaExportData(){
 
 function _shiftColor(code,isHoliday){
   const c=String(code||'').toUpperCase();
-  if(isHoliday||c==='PH')return{bg:'#fee2e2',fg:'#b91c1c'};
+  if(isHoliday||c==='PH')return{bg:'#1e3a8a',fg:'#ffffff'};
   if(c==='OFF'||c==='-')return{bg:'#f3f4f6',fg:'#6b7280'};
   if(c==='L')return{bg:'#fef3c7',fg:'#92400e'};
   return{bg:'#dcfce7',fg:'#14532d'};
@@ -24125,7 +24226,7 @@ function downloadRotaPdf(){
   <div style="margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0">
     <div style="font-size:10.5px;font-weight:700;color:#1e293b;margin-bottom:7px">Color Guide</div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-      ${[['#dcfce7','#14532d','Working Day'],['#f3f4f6','#6b7280','Day Off'],['#fee2e2','#b91c1c','Public Holiday'],['#fef3c7','#92400e','Leave']].map(([bg,fg,label])=>`<div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:#1e293b"><span style="width:16px;height:16px;border-radius:3px;background:${bg};border:1px solid ${fg}"></span> ${label}</div>`).join('')}
+      ${[['#dcfce7','#14532d','Working Day'],['#f3f4f6','#6b7280','Day Off'],['#1e3a8a','#ffffff','Public Holiday'],['#fef3c7','#92400e','Leave']].map(([bg,fg,label])=>`<div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:#1e293b"><span style="width:16px;height:16px;border-radius:3px;background:${bg};border:1px solid ${fg}"></span> ${label}</div>`).join('')}
     </div>
     <div style="font-size:8.5px;color:#64748b">Shift Codes — M: Morning &middot; E: Evening &middot; N: Night &middot; OT: Overtime &middot; L: Leave &middot; OFF: Day Off &middot; PH: Public Holiday</div>
     <div style="font-size:8.5px;color:#64748b;margin-top:2px">Colored dots under a shift are that day's assigned tasks (from Weekly/Monthly Rota task assignment), with their scheduled time.</div>

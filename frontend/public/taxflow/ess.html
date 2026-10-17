@@ -638,6 +638,8 @@
         </div>
         <div class="tk-requests" id="tk-requests" hidden></div>
         <div id="tasks-content" class="loading">Loading…</div>
+        <!-- My department's tasks, read-only (GET /ess/tasks/department) -->
+        <div id="tasks-dept" style="margin-top:18px"></div>
       </div>
     </div>
 
@@ -729,6 +731,19 @@
       <div class="field"><label for="leave-end">End Date</label><input id="leave-end" type="date" oninput="essUpdateLeavePreview()"></div>
     </div>
     <div id="leave-preview" class="leave-preview" aria-live="polite"></div>
+    <!-- Sick Leave: a sick note, as a photo from the camera or a file (POST /ess/leave attachment) -->
+    <div id="leave-attach" class="field" style="display:none">
+      <label>Sick note <span style="color:var(--red)">*</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="btn-ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Take photo<input type="file" accept="image/*" capture="environment" hidden onchange="essLeaveAttach(this)"></label>
+        <label class="btn-ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.5 12 20a5 5 0 0 1-7-7l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4L15 7.5"/></svg>
+          Upload file<input type="file" accept="image/*,application/pdf" hidden onchange="essLeaveAttach(this)"></label>
+      </div>
+      <div id="leave-attach-info" style="font-size:12.5px;color:var(--text2);margin-top:8px"></div>
+    </div>
     <div class="field last">
       <label for="leave-reason">Reason (optional)</label>
       <input id="leave-reason" type="text" placeholder="Brief reason for HR">
@@ -759,6 +774,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/ess.js?v=86803aa396" defer></script>
+<script src="src/ess.js?v=0f27946960" defer></script>
 </body>
 </html>

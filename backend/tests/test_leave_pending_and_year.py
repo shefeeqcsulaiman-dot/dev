@@ -4,6 +4,7 @@
    entitlement - approved - pending, and the balances show the pending days.
 2. ESS counts days like HRMS: a Working-basis annual policy skips weekends.
 3. A request is checked against the year it starts in, not the current year."""
+import pytest
 import uuid
 from datetime import date, timedelta
 
@@ -137,3 +138,11 @@ def test_approval_still_checks_entitlement_for_the_leave_year(client, db, auth_h
     pending = db.query(LeaveRequest).filter(LeaveRequest.employee_id == emp.id, LeaveRequest.status == "pending").one()
     r = client.post(f"/api/v1/leave/requests/{pending.id}/approve", headers=auth_headers)
     assert r.status_code == 409, r.text
+
+
+@pytest.fixture(autouse=True)
+def _full_year_entitlement(monkeypatch):
+    """These tests are about other rules: give the whole year's Annual Leave up front, as
+    before accrual (tests/test_leave_accrual.py covers accrual)."""
+    from app.routers import leave as _leave
+    monkeypatch.setattr(_leave, "accrued_days", lambda settings, yearly, join_date, on: yearly)

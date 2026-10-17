@@ -34,7 +34,11 @@ from app.routers.leave import (
     annual_leave_basis,
     assert_leave_available,
     assert_leave_type_offered,
+    attachment_response,
+    checked_attachment,
     inactive_leave_types,
+    leave_balances,
+    leave_day_breakdown,
     leave_request_days,
 )
 from app.security import pwd_context, verify_employee_password
@@ -428,6 +432,7 @@ def ess_holidays(request: Request, db: Session = Depends(get_db)) -> list[dict]:
             "id": r.get("id"),
             "date": raw_date,
             "name": r.get("name") or "Holiday",
+            "message": r.get("message") or "",
             "location": r.get("location") or "All branches",
             "paid": r.get("paid") if r.get("paid") is not None else True,
         })
@@ -504,29 +509,31 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
     top-level annual_entitlement + a separate (flat-cap) by_type entry kept
     there only for that endpoint's own backward compatibility."""
     emp = ess_bearer(request, db)
-    policies = _employee_leave_policies(db, emp.company_id)
-    configs = _effective_leave_policy_configs(db, emp.company_id)
-    caps = _leave_type_caps(db, emp.company_id)
-    annual_entitlement = _leave_entitlement_days(emp.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
-    used_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id)   # one grouped query
-    pending_map = _used_days_by_employee_and_type(db, emp.company_id, emp.id, statuses=("pending",))
-    annual_used = used_map.get((emp.id, "Annual Leave"), 0)
+    # Same calculation as HRMS's Leave Balance (leave.leave_balances()): the employee's own
+    # leave year, Annual Leave earned by policy and accrual, each type's day-count basis.
+    balances = leave_balances(db, emp.company_id, [emp])[emp.id]
     inactive = inactive_leave_types(db, emp.company_id)
     by_type = {}
-    for leave_type, cap in caps.items():
+    for leave_type, b in balances.items():
         if leave_type in inactive:
             continue
-        if leave_type == "Annual Leave":
-            entitlement, used = annual_entitlement, annual_used
-        else:
-            entitlement = cap
-            used = used_map.get((emp.id, leave_type), 0)
-        pending = pending_map.get((emp.id, leave_type), 0)
         # remaining = what this employee can still request: pending requests are on hold.
-        by_type[leave_type] = {"entitlement": entitlement, "used": used, "pending": pending,
-                               "remaining": max(0, entitlement - used - pending)}
-    by_type.get("Annual Leave", {})["basis"] = annual_leave_basis(db, emp.company_id, emp.employee_no)
-    return {"year": date.today().year, "by_type": by_type, "inactive_types": sorted(inactive)}
+        by_type[leave_type] = {"entitlement": b["entitlement"], "yearly_entitlement": b["yearly_entitlement"],
+                               "used": b["used"], "pending": b["pending"], "basis": b["basis"],
+                               "remaining": max(0, b["entitlement"] - b["used"] - b["pending"])}
+    leave_year = next(iter(balances.values()), {}).get("leave_year")
+    return {"year": date.today().year, "leave_year": leave_year, "by_type": by_type, "inactive_types": sorted(inactive)}
+
+
+@router.get("/leave/days")
+def ess_leave_days(request: Request, leave_type: str = Query(...), start: date = Query(...), end: date = Query(...),
+                   db: Session = Depends(get_db)) -> dict:
+    """How many days a leave request for these dates would use, and which days it skips
+    (weekend, public holidays, rota days off) -- the same count the request gets."""
+    emp = ess_bearer(request, db)
+    if end < start:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    return leave_day_breakdown(db, emp.company_id, emp.employee_no, leave_type, start, end)
 
 
 class EssAnnouncementOut(BaseModel):
@@ -669,6 +676,7 @@ def _leave_out(r: LeaveRequest, today: str | None = None) -> dict:
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "cancelled_by": r.cancelled_by, "cancel_reason": r.cancel_reason,
         "can_cancel": _leave_can_cancel(r, today) if today else r.status == "pending",
+        "attachment_name": r.attachment_name,
     }
 
 
@@ -697,6 +705,8 @@ class EssLeaveRequestIn(BaseModel):
     start_date: date
     end_date: date
     reason: str | None = None
+    attachment: str | None = None        # data URL: a sick note photo or PDF
+    attachment_name: str | None = None
 
 
 @router.post("/leave", status_code=201)
@@ -736,10 +746,15 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
     # HRMS: the year the leave starts in, with pending requests counted as on hold.
     days = leave_request_days(db, emp.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
     assert_leave_available(db, emp.company_id, emp, payload.leave_type, payload.start_date, days)
+    attachment, attachment_name = checked_attachment(payload.attachment, payload.attachment_name)
+    # Sick leave from ESS needs a sick note or a photo of it (HR can still enter one without).
+    if payload.leave_type == "Sick Leave" and not attachment:
+        raise HTTPException(status_code=400, detail="Attach your sick note: upload a file or take a photo")
     req = LeaveRequest(
         company_id=emp.company_id, employee_id=emp.id, leave_type=payload.leave_type,
         start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
         days=days, reason=payload.reason, status="pending",
+        attachment=attachment, attachment_name=attachment_name,
     )
     db.add(req)
     db.commit()
@@ -811,6 +826,33 @@ def ess_tasks(request: Request, db: Session = Depends(get_db)) -> list:
     mine = [t for t in _owned_records(db, emp.company_id, "tasks", [emp.id]) if t.get("assigned_to") == emp.id]
     mine.sort(key=lambda t: t.get("due_date") or "9999-99-99")
     return mine
+
+
+@router.get("/tasks/department")
+def ess_department_tasks(request: Request, db: Session = Depends(get_db)) -> list:
+    """The tasks of this employee's own department (Task Management's Department field),
+    read-only: who has each one, its status and due date. Open tasks first."""
+    from sqlalchemy import func as _f
+
+    from app.models import TaskRecord
+    emp = ess_bearer(request, db)
+    dept = (emp.department or "").strip()
+    if not dept:
+        return []
+    ids = [i for (i,) in db.query(TaskRecord.id).filter(
+        TaskRecord.company_id == emp.company_id, _f.lower(TaskRecord.department) == dept.lower()).limit(300).all()]
+    out = []
+    for row in db.query(AppDataRecord).filter(AppDataRecord.id.in_(ids)).all() if ids else []:
+        try:
+            t = json.loads(row.payload)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(t, dict):
+            t["is_mine"] = t.get("assigned_to") == emp.id
+            out.append(t)
+    done = {"done", "completed", "closed", "cancelled"}
+    out.sort(key=lambda t: (str(t.get("status") or "").lower() in done, t.get("due_date") or "9999-99-99"))
+    return out
 
 
 @router.get("/rota")
@@ -1030,6 +1072,17 @@ def _local_today_for(db: Session, emp: Employee) -> date:
 
 
 # ── quick wins: cancel a pending leave request / update own task status ──────
+
+@router.get("/leave/{leave_id}/attachment")
+def ess_leave_attachment(leave_id: str, request: Request, db: Session = Depends(get_db)):
+    """The employee's own sick note / photo on one of their leave requests."""
+    emp = ess_bearer(request, db)
+    req = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id, LeaveRequest.company_id == emp.company_id,
+                                        LeaveRequest.employee_id == emp.id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    return attachment_response(req)
+
 
 class EssLeaveCancelIn(BaseModel):
     reason: str | None = None

@@ -1846,6 +1846,10 @@ class LeaveRequest(Base, TimestampMixin):
     end_date: Mapped[str] = mapped_column(String(20), nullable=False)
     days: Mapped[int] = mapped_column(Integer, default=1)
     reason: Mapped[str | None] = mapped_column(String(500))
+    # A sick note or photo attached from ESS (data URL, image or PDF). Deferred: lists never
+    # load it; GET .../attachment does.
+    attachment: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    attachment_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     approved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     # Separate FK for an Employee-principal approver (HRMS sub-user) — kept

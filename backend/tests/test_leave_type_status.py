@@ -31,7 +31,7 @@ def test_inactive_type_is_refused_and_hidden(client, db, auth_headers):
         assert "Annual Leave" in bal["by_type"]
 
         # other types are unaffected
-        r = client.post("/api/v1/ess/leave", headers=h, json={"leave_type": "Sick Leave", "start_date": day, "end_date": day})
+        r = client.post("/api/v1/ess/leave", headers=h, json={"leave_type": "Sick Leave", "start_date": day, "end_date": day, "attachment": "data:image/png;base64,iVBORw0KGgo="})
         assert r.status_code == 201, r.text
 
         _set_policy(client, auth_headers, set())

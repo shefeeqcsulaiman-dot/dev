@@ -69,7 +69,7 @@ def test_ess_leave_rejects_bad_type_and_overlap(client, db, auth_headers):
     assert r.status_code == 400, r.text
 
     r = client.post("/api/v1/ess/leave", headers=headers_a, json={
-        "leave_type": "Sick Leave", "start_date": "2026-11-01", "end_date": "2026-11-03",
+        "leave_type": "Sick Leave", "start_date": "2026-11-01", "end_date": "2026-11-03", "attachment": "data:image/png;base64,iVBORw0KGgo=",
     })
     assert r.status_code == 201, r.text
 
