@@ -250,7 +250,30 @@ def posting_ref(record: dict[str, Any], collection: str) -> str:
         )
     if collection == "bills":
         return normalized_ref(record.get("bill_no") or (f"BILL-{record['id']}" if record.get("id") else None))
+    if collection == "expenses":
+        return normalized_ref(expense_reference(record))
     return ""
+
+
+# An expense reaches the ledger once it's approved; pending, draft and rejected ones don't.
+EXPENSE_POSTED_STATUSES = frozenset({"approved", "paid", "posted", "reimbursed", "settled"})
+
+
+def expense_reference(record: dict[str, Any]) -> str:
+    """The reference an expense posts its SourceTransaction under (app_data.py sync_expense())."""
+    ref = str(record.get("ref") or "").strip()
+    if ref:
+        return ref
+    return f"EXPENSE-{record['id']}" if record.get("id") else ""
+
+
+def expense_is_posted(record: dict[str, Any]) -> bool:
+    return normalized_ref(record.get("status")) in EXPENSE_POSTED_STATUSES
+
+
+def expense_is_paid(record: dict[str, Any]) -> bool:
+    """Paid out already (cash, card, bank): its posting is settled against Cash & Bank."""
+    return normalized_ref(record.get("status")) in {"paid", "reimbursed", "settled"}
 
 
 def _safe(compute: Callable[[], Decimal]) -> Decimal | None:

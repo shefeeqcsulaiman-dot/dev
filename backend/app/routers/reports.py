@@ -1462,10 +1462,18 @@ def _build_summary(db: Session, company_id: str, branch_id: str | None = None) -
     # app_data "expenses" collection has no branch_id column of its own
     # (AppDataRecord.branch_id does, but expenses aren't written through the
     # branch-aware save path today) — left company-wide, same as corporate/
-    # assets/budget_cash/control below.
+    # assets/budget_cash/control below. An approved expense posts a SourceTransaction
+    # (module "expense", already summed above) under the reference stamped in fig_ref,
+    # so only the expenses that haven't posted (pending, draft, ...) are added here.
+    posted_expense_refs = select(func.lower(func.trim(SourceTransaction.reference))).where(
+        SourceTransaction.company_id == company_id, SourceTransaction.module.in_(["expense", "expenses"]))
     expenses += money(
         db.query(func.coalesce(func.sum(AppDataRecord.fig_net), 0))
-        .filter(AppDataRecord.company_id == company_id, AppDataRecord.collection == "expenses")
+        .filter(
+            AppDataRecord.company_id == company_id,
+            AppDataRecord.collection == "expenses",
+            or_(AppDataRecord.fig_ref.is_(None), AppDataRecord.fig_ref.notin_(posted_expense_refs)),
+        )
         .scalar()
     )
     operating_expenses = expenses + payroll

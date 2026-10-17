@@ -33,11 +33,11 @@ from starlette.concurrency import run_in_threadpool
 import app.cache as cache
 import app.timezone_utils as timezone_utils
 from app import attendance_store
-from app.accounting_posting import ensure_credit_note_tax_line, release_bank_matches
+from app.accounting_posting import assert_posting_period_open, ensure_credit_note_tax_line, posting_datetime, release_bank_matches
 from app.config import get_settings
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
-from app.doc_index import parse_document_date, recompute_payment_targets
+from app.doc_index import expense_is_paid, expense_is_posted, expense_kind, expense_reference, parse_document_date, recompute_payment_targets
 from app.stock_units import purchase_stock, unit_cost as stock_unit_cost
 from app.employee_records import store_main_copy as store_employee_main_copy
 from app.party_checks import check_party_form, clean_party_batch
@@ -47,7 +47,7 @@ from app.workflow_status import OPEN_WORK_COLLECTIONS, finished_status_sql, is_f
 from app.department_scope import SCOPED_COLLECTIONS, assert_record_writable, build_index, filter_records, record_in_scope
 from app.dependencies import Principal, branch_allows_module, company_allows_module, get_current_principal, get_current_user, principal_module_allowed, require_company_admin, require_module
 from app.limiter import limiter
-from app.module_integration import approve_and_post_source, sync_bill_accounting, sync_purchase_accounting, sync_receipt_payment_accounting, sync_sales_invoice_accounting, upsert_source_transaction
+from app.module_integration import approve_and_post_source, refresh_corporate_tax_from_posted_sources, sync_bill_accounting, sync_expense_accounting, sync_purchase_accounting, sync_receipt_payment_accounting, sync_sales_invoice_accounting, upsert_source_transaction
 from app.routers.inventory import consume_valuation_layers
 from app.rota_days import rota_in_range
 from app.models import (
@@ -2676,6 +2676,9 @@ def sync_domain_model(db: Session, principal: Principal, collection: str, record
                 document_date=record_document_date(record),
             )
 
+    elif collection == "expenses":
+        sync_expense(db, principal, record)
+
     elif collection in ("employees", "staff"):
         emp_no = str(record.get("id") or record.get("employee_no") or record.get("emp_no") or "").strip()
         full_name = str(record.get("name") or record.get("full_name") or "").strip()
@@ -3178,6 +3181,109 @@ def purchase_line_stock_mapping(
     return mapping
 
 
+# Expense categories the Expenses form offers, by the default chart account they post to
+# (company_defaults.py). Anything else lands on General & Administrative Expenses.
+_EXPENSE_CATEGORY_ACCOUNTS = (
+    (("salary", "payroll", "wages"), "6000"),
+    (("rent", "lease"), "6100"),
+    (("utilit", "electric", "water", "dewa"), "6200"),
+    (("bank charge", "bank fee"), "6400"),
+)
+_DEFAULT_EXPENSE_ACCOUNT = "6300"
+
+
+def _expense_account_code(db: Session, company_id: str, record: dict[str, Any]) -> str:
+    """The account an expense debits: the record's own account code, else an account whose code
+    or name is the category, else the category's default account (a Direct Expense is cost of
+    sales), else General & Administrative Expenses, else Purchases."""
+    accounts = {code: (name or "").strip().lower() for code, name in db.query(Account.code, Account.name).filter(
+        Account.company_id == company_id).all()}
+    explicit = str(record.get("account_code") or record.get("account") or "").strip()
+    if explicit in accounts:
+        return explicit
+    category = str(record.get("category") or "").strip().lower()
+    if category:
+        for code, name in accounts.items():
+            if category in (code.lower(), name):
+                return code
+        if expense_kind(record) == "direct" and "5000" in accounts:
+            return "5000"
+        for words, code in _EXPENSE_CATEGORY_ACCOUNTS:
+            if code in accounts and any(word in category for word in words):
+                return code
+    for code in (_DEFAULT_EXPENSE_ACCOUNT, "4000"):
+        if code in accounts:
+            return code
+    return _DEFAULT_EXPENSE_ACCOUNT  # build_journal reports the missing account
+
+
+def sync_expense(db: Session, principal: Principal, record: dict[str, Any]) -> None:
+    """Approved expenses post to the ledger (expense account + input VAT against Supplier
+    payable) on their own date; a paid one also posts its settlement (Dr Supplier payable,
+    Cr Cash & Bank) under "<ref>-PAID". One that goes back to pending/draft or is rejected
+    loses its postings, unless they sit in a locked period."""
+    reference = expense_reference(record)[:114]
+    if not reference:
+        return
+    company_id = principal.company_id
+    vat = decimal_value(record.get("vat_amount") or record.get("vat") or record.get("tax_amount"))
+    total = decimal_value(record.get("total"))
+    subtotal = decimal_value(record.get("amount") or record.get("subtotal") or record.get("net_amount"))
+    if not subtotal and total:
+        subtotal = total - vat
+    posted = expense_is_posted(record) and subtotal > 0 and vat >= 0
+    paid = posted and expense_is_paid(record)
+    branch_id = str(record.get("branch_id") or "").strip() or principal.branch_id
+    party = str(record.get("vendor") or record.get("supplier") or record.get("employee") or "")
+    if posted:
+        sync_expense_accounting(
+            db,
+            company_id=company_id,
+            reference=reference,
+            party_name=party,
+            subtotal=subtotal,
+            vat=vat,
+            total=subtotal + vat,
+            account_code=_expense_account_code(db, company_id, record),
+            description=str(record.get("description") or record.get("category") or reference),
+            user_id=principal_user_id(principal),
+            branch_id=branch_id,
+            document_date=record_document_date(record),
+        )
+    if paid:
+        sync_receipt_payment_accounting(
+            db,
+            company_id=company_id,
+            is_supplier=True,
+            reference=f"{reference}-PAID",
+            party_name=party,
+            amount=subtotal + vat,
+            user_id=principal_user_id(principal),
+            branch_id=branch_id,
+            document_date=record_document_date(record),
+        )
+    removed = False
+    for module, ref, wanted in (("expense", reference, posted), ("payment", f"{reference}-PAID", paid)):
+        if not wanted:
+            removed = _remove_expense_posting(db, company_id, module, ref) or removed
+    if removed:
+        refresh_corporate_tax_from_posted_sources(db, company_id)
+
+
+def _remove_expense_posting(db: Session, company_id: str, module: str, reference: str) -> bool:
+    tx = (
+        db.query(SourceTransaction)
+        .filter(SourceTransaction.company_id == company_id, SourceTransaction.module == module,
+                SourceTransaction.reference == reference)
+        .first()
+    )
+    if not tx:
+        return False
+    assert_posting_period_open(db, company_id, "expense", posting_datetime(tx.document_date), reference)
+    _delete_source_transaction_cascade(db, company_id, tx.id)
+    return True
+
+
 def _delete_source_transaction_cascade(db: Session, company_id: str, tx_id: str) -> None:
     journal_ids = [
         row[0] for row in db.query(JournalEntry.id).filter(
@@ -3318,9 +3424,9 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
             if invoice:
                 db.delete(invoice)
 
-    elif collection in {"purchaseRecords", "bills", "payments"}:
-        module = {"purchaseRecords": "purchase", "bills": "purchase_bill", "payments": "payment"}[collection]
-        reference = str(
+    elif collection in {"purchaseRecords", "bills", "payments", "expenses"}:
+        module = {"purchaseRecords": "purchase", "bills": "purchase_bill", "payments": "payment", "expenses": "expense"}[collection]
+        reference = expense_reference(record)[:114] if collection == "expenses" else str(
             record.get("ref")
             or record.get("invoice_no")
             or record.get("bill_no")
@@ -3340,6 +3446,8 @@ def sync_domain_delete(db: Session, principal: Principal, collection: str, recor
             )
             if tx:
                 _delete_source_transaction_cascade(db, principal.company_id, tx.id)
+            if collection == "expenses":
+                _remove_expense_posting(db, principal.company_id, "payment", f"{reference[:114]}-PAID")
             db.query(StockMovement).filter(
                 StockMovement.company_id == principal.company_id,
                 StockMovement.movement_type == module,

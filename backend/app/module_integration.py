@@ -147,6 +147,48 @@ def sync_bill_accounting(
     return tx
 
 
+def sync_expense_accounting(
+    db: Session,
+    company_id: str,
+    reference: str,
+    party_name: str,
+    subtotal: Decimal,
+    vat: Decimal,
+    total: Decimal,
+    account_code: str,
+    description: str,
+    user_id: str | None = None,
+    branch_id: str | None = None,
+    document_date: object = None,
+) -> SourceTransaction:
+    """An approved app-data expense: Dr the expense account, Dr Input VAT, Cr Supplier payable
+    (build_journal's "expense" branch), on the expense's own date, with an input VAT line."""
+    tx = upsert_source_transaction(
+        db,
+        company_id=company_id,
+        module="expense",
+        reference=reference,
+        party_name=party_name,
+        subtotal=subtotal,
+        vat=vat,
+        total=total,
+        lines=[{
+            "description": description or reference,
+            "account_code": account_code,
+            "quantity": Decimal("1"),
+            "unit_price": subtotal,
+            "amount": subtotal,
+            "vat_rate": (money(vat) / money(subtotal) * Decimal("100")) if money(subtotal) and money(vat) else Decimal("0"),
+        }],
+        default_account_code=account_code,
+        branch_id=branch_id,
+        document_date=document_date,
+    )
+    approve_and_post_source(db, tx, user_id)
+    refresh_corporate_tax_from_posted_sources(db, company_id)
+    return tx
+
+
 def sync_receipt_payment_accounting(
     db: Session,
     company_id: str,
