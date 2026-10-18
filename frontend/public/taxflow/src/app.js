@@ -809,6 +809,8 @@ function openEmpEdit(emp){
   setV('emp-join-date',emp.join_date);
   setSel('emp-ot-rate',emp.overtime_rate);
   setSel('emp-leave-policy',emp.leave_policy);
+  setV('emp-leave-carry',emp.leave_carry_forward||'');
+  window._empCarryLoaded={value:String(emp.leave_carry_forward||''),entered:emp.leave_carry_entered||''};
   setSel('emp-shift',emp.shift);
   setV('emp-emergency',emp.emergency_contact);
   setV('emp-emergency-mobile',emp.emergency_mobile);
@@ -920,6 +922,15 @@ function saveEmployee(){
     join_date:employeeFormValue('emp-join-date'),
     overtime_rate:employeeFormValue('emp-ot-rate'),
     leave_policy:employeeFormValue('emp-leave-policy'),
+    // Carried-forward days apply to the leave year they're entered in: stamp the date when
+    // the number changes (or is first set).
+    ...(()=>{
+      const v=String(employeeFormValue('emp-leave-carry')||'').trim();
+      const prev=window._empCarryLoaded||{value:'',entered:''};
+      const today=new Date();
+      const iso=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      return {leave_carry_forward:v,leave_carry_entered:v?(v===prev.value&&prev.entered?prev.entered:iso):''};
+    })(),
     emergency_contact:employeeFormValue('emp-emergency'),
     emergency_mobile:employeeFormValue('emp-emergency-mobile'),
     work_permit_no:employeeFormValue('emp-work-permit'),
@@ -19787,7 +19798,9 @@ async function updateLeaveBalance(){
     const pending=b.pending||0;
     const left=b.available??b.remaining;
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(b.employee_name)}</td><td class="mono">${b.annual_entitlement}</td><td class="mono">${sick.remaining}</td><td class="mono">${b.used}</td><td class="mono">${pending}</td><td class="mono" ${left<5?'style="color:var(--red)"':''}>${left}</td>`;
+    const cf=b.carried_forward;
+    const cfCell=cf?`<span title="${cf.use_by?`Use by ${escapeHtml(cf.use_by)}`:'No deadline'}${cf.expired?' · unused days expired':''}">${cf.counted}${cf.expired?` <span style="color:var(--text3)">of ${cf.days}</span>`:''}</span>`:'—';
+    tr.innerHTML=`<td>${escapeHtml(b.employee_name)}</td><td class="mono">${b.annual_entitlement}</td><td class="mono">${cfCell}</td><td class="mono">${sick.remaining}</td><td class="mono">${b.used}</td><td class="mono">${pending}</td><td class="mono" ${left<5?'style="color:var(--red)"':''}>${left}</td>`;
     tbody.appendChild(tr);
   });
   if(!tbody.children.length)emptyTableMessage(tbody,'No employees in database yet.');
@@ -20844,6 +20857,7 @@ function _getLeavePolicyOptions(){
 }
 
 function openEmpModal(){
+  window._empCarryLoaded={value:'',entered:''};   // a new employee: no carried leave yet
   _populateEmpSelects();
   // Reset title/button for "add" mode
   const titleEl=document.querySelector('#m-emp .modal-title');

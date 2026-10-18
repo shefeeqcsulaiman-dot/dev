@@ -761,7 +761,9 @@
       var annual = _essLeaveBal['Annual Leave'];
       var av = document.getElementById('dash-annual-left'), as = document.getElementById('dash-annual-sub');
       if (av) av.textContent = annual ? annual.remaining + (annual.remaining === 1 ? ' day' : ' days') : '—';
-      if (as) as.textContent = annual ? 'of ' + annual.entitlement + ' entitlement' : 'Your balance';
+      var cf = annual && annual.carried_forward;
+      if (as) as.textContent = annual ? 'of ' + annual.entitlement + ' entitlement' +
+        (cf && cf.counted ? ' (incl. ' + cf.counted + ' carried' + (cf.use_by ? ', use by ' + new Date(cf.use_by + 'T00:00:00').toLocaleDateString('en-GB', {day: 'numeric', month: 'short'}) : '') + ')' : '') : 'Your balance';
       if (!types.length) { setAll('<div class="empty">No leave types configured yet.</div>'); return; }
       setAll(types.map(function(type) {
         var b = data.by_type[type];

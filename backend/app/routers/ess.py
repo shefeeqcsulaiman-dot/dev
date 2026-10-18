@@ -520,6 +520,7 @@ def ess_leave_balance(request: Request, db: Session = Depends(get_db)) -> dict:
         # remaining = what this employee can still request: pending requests are on hold.
         by_type[leave_type] = {"entitlement": b["entitlement"], "yearly_entitlement": b["yearly_entitlement"],
                                "used": b["used"], "pending": b["pending"], "basis": b["basis"],
+                               "carried_forward": b.get("carried_forward"),
                                "remaining": max(0, b["entitlement"] - b["used"] - b["pending"])}
     leave_year = next(iter(balances.values()), {}).get("leave_year")
     return {"year": date.today().year, "leave_year": leave_year, "by_type": by_type, "inactive_types": sorted(inactive)}

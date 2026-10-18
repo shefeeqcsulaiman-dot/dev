@@ -236,6 +236,66 @@ def _parse_date(value) -> date | None:
         return None
 
 
+def _to_float(value) -> float:
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def carry_deadline(settings: dict, window_start: date, window_end: date) -> date | None:
+    """Last day carried-forward leave can be used, from HR Settings > Carry-Forward Deadline:
+    the end of that month in the leave year ("End of March"), the end of the leave year, or
+    None for "No deadline"."""
+    text = str(settings.get("carry_deadline") or "End of March")
+    if text.startswith("No"):
+        return None
+    if "Leave Year" in text:
+        return window_end - timedelta(days=1)
+    months = {m: i for i, m in enumerate(["January", "February", "March", "April", "May", "June", "July", "August",
+                                          "September", "October", "November", "December"], 1)}
+    month = next((n for name, n in months.items() if name in text), 3)
+    year = window_start.year if month >= window_start.month else window_start.year + 1
+    return _add_months(date(year, month, 1), 1) - timedelta(days=1)
+
+
+def carry_forward_days(settings: dict, profile: dict, window: tuple[date, date], on: date,
+                       used_before_deadline: float = 0) -> tuple[float, float, date | None]:
+    """(days counted now, days carried, deadline) of this employee's carried-forward Annual
+    Leave in the leave year `window`: what HR entered (capped by the Annual Leave type's Max
+    Carry when set), for the leave year it was entered in. After the deadline only the
+    carried days already used before it still count; the rest expire."""
+    carried = float(profile.get("carry") or 0)
+    entered = profile.get("carry_entered")
+    ws, we = window
+    if carried <= 0 or (entered and not (ws <= entered < we)):
+        return 0, 0, None
+    for entry in settings.get("leave_types") or []:
+        if isinstance(entry, dict) and str(entry.get("type") or "") == "Annual Leave":
+            cap = _to_float(entry.get("max_carry"))
+            if cap > 0:
+                carried = min(carried, cap)
+    deadline = carry_deadline(settings, ws, we)
+    if deadline is not None and entered and entered > deadline:
+        # Entered after this year's deadline (e.g. when the company starts using the app
+        # mid-year): usable for the rest of the leave year rather than already expired.
+        deadline = we - timedelta(days=1)
+    counted = carried if deadline is None or on <= deadline else min(carried, used_before_deadline)
+    as_num = lambda v: int(v) if float(v).is_integer() else v
+    return as_num(counted), as_num(carried), deadline
+
+
+def _annual_used_before(db: Session, company_id: str, employee_id: str, window: tuple[date, date], deadline: date | None) -> int:
+    if deadline is None:
+        return 0
+    total = db.query(func.coalesce(func.sum(LeaveRequest.days), 0)).filter(
+        LeaveRequest.company_id == company_id, LeaveRequest.employee_id == employee_id,
+        LeaveRequest.leave_type == "Annual Leave", LeaveRequest.status == "approved",
+        LeaveRequest.start_date >= window[0].isoformat(), LeaveRequest.start_date <= deadline.isoformat(),
+    ).scalar()
+    return int(total or 0)
+
+
 def _employee_profiles(db: Session, company_id: str) -> dict[str, dict]:
     """employee_no -> {"policy": str, "join_date": date | None} from the employees records."""
     out: dict[str, dict] = {}
@@ -250,7 +310,11 @@ def _employee_profiles(db: Session, company_id: str) -> dict[str, dict]:
         emp_no = str(data.get("id") or data.get("employee_no") or "").strip()
         if emp_no:
             out[emp_no] = {"policy": str(data.get("leave_policy") or "").strip(),
-                           "join_date": _parse_date(data.get("join_date") or data.get("joining_date"))}
+                           "join_date": _parse_date(data.get("join_date") or data.get("joining_date")),
+                           # Unused Annual Leave carried from last year, entered by HR on the employee
+                           # (carry_forward_days()); applies to the leave year it was entered in.
+                           "carry": _to_float(data.get("leave_carry_forward")),
+                           "carry_entered": _parse_date(data.get("leave_carry_entered"))}
     return out
 
 
@@ -801,8 +865,17 @@ def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type
             employee_no, {k: v["policy"] for k, v in profiles.items() if v["policy"]},
             _effective_leave_policy_configs(db, company_id), default_days=caps.get("Annual Leave", 21),
         )
-        return accrued_days(_leave_settings(db, company_id), yearly,
-                            (profiles.get(employee_no) or {}).get("join_date"), on or date.today())
+        settings = _leave_settings(db, company_id)
+        prof = profiles.get(employee_no) or {}
+        on = on or date.today()
+        earned = accrued_days(settings, yearly, prof.get("join_date"), on)
+        if prof.get("carry"):
+            window = leave_year_window(settings, prof.get("join_date"), on)
+            emp = db.query(Employee.id).filter(Employee.company_id == company_id, Employee.employee_no == employee_no).first()
+            deadline = carry_forward_days(settings, prof, window, window[1])[2]   # this employee's own deadline
+            used_before = _annual_used_before(db, company_id, emp[0], window, deadline) if emp else 0
+            earned = earned + carry_forward_days(settings, prof, window, on, used_before)[0]
+        return earned
     return caps.get(leave_type)
 
 
@@ -886,11 +959,13 @@ def leave_balance(
                                    "available": max(0, t["entitlement"] - t["used"] - t["pending"]),
                                    "basis": t["basis"]}
         by_type["Annual Leave"]["yearly_entitlement"] = annual["yearly_entitlement"]
+        by_type["Annual Leave"]["carried_forward"] = annual.get("carried_forward")
         # remaining = entitlement - approved; available also takes off pending requests (on hold).
         result.append({
             "employee_id": e.id, "employee_name": e.full_name,
             "annual_entitlement": annual_entitlement,
             "annual_yearly_entitlement": annual["yearly_entitlement"],
+            "carried_forward": annual.get("carried_forward"),
             "leave_year": annual["leave_year"],
             "used": annual_used,
             "pending": annual_pending,
@@ -930,11 +1005,22 @@ def leave_balances(db: Session, company_id: str, employees: list[Employee], on: 
         yearly = _leave_entitlement_days(e.employee_no, policies, configs, default_days=caps.get("Annual Leave", 21))
         entry = {}
         for leave_type, cap in caps.items():
+            carry = None
             if leave_type == "Annual Leave":
                 ent, year_ent = accrued_days(settings, yearly, prof.get("join_date"), on), yearly
+                if prof.get("carry"):
+                    window = (date.fromisoformat(windows[e.id][0]), date.fromisoformat(windows[e.id][1]))
+                    deadline = carry_forward_days(settings, prof, window, window[1])[2]
+                    counted, carried, deadline = carry_forward_days(
+                        settings, prof, window, on, _annual_used_before(db, company_id, e.id, window, deadline))
+                    if carried:
+                        ent = ent + counted
+                        carry = {"days": carried, "counted": counted, "use_by": deadline.isoformat() if deadline else None,
+                                 "expired": counted < carried}
             else:
                 ent, year_ent = cap, cap
             entry[leave_type] = {
+                "carried_forward": carry,
                 "entitlement": ent, "yearly_entitlement": year_ent,
                 "used": used.get((e.id, leave_type, "approved"), 0), "pending": used.get((e.id, leave_type, "pending"), 0),
                 "basis": leave_basis(db, company_id, e.employee_no, leave_type, settings, profiles),

@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=e801bd4e79" as="style">
-<link rel="preload" href="src/app.js?v=988560a636" as="script">
+<link rel="preload" href="src/app.js?v=cb93ea010b" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=e801bd4e79">
 <style>
@@ -1293,7 +1293,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
       <div class="card">
         <div class="card-hd"><div class="card-title">Leave Balance Summary</div></div>
         <table class="tbl" data-delete-actions-bound="skip">
-          <thead><tr><th>Employee</th><th>Annual</th><th>Sick</th><th>Used</th><th>Pending</th><th>Remaining</th></tr></thead>
+          <thead><tr><th>Employee</th><th>Annual</th><th>Carried</th><th>Sick</th><th>Used</th><th>Pending</th><th>Remaining</th></tr></thead>
           <tbody id="leave-balance-tbody">
           </tbody>
         </table>
@@ -2979,6 +2979,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div class="fr3"><div class="fg"><label class="fl">Department <span style="color:var(--red)">*</span></label><select class="fi" id="emp-department" required onchange="filterEmpRoles()"><option value="">— Select Department —</option></select></div><div class="fg"><label class="fl">Designation</label><input class="fi" id="emp-designation" placeholder="e.g. Sales Executive"></div><div class="fg"><label class="fl">Branch <span style="color:var(--red)">*</span></label><select class="fi" id="emp-branch" required onchange="filterEmpRoles()"><option value="">— Select Branch —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Role <span style="color:var(--red)">*</span></label><select class="fi" id="emp-role"><option value="">— Select Branch &amp; Department first —</option></select></div><div class="fg" style="align-self:flex-end"><div style="font-size:11px;color:var(--text3);padding-bottom:6px">Role options update automatically when Branch and Department are selected.</div></div><div class="fg"><label class="fl">Supervisor</label><input class="fi" id="emp-supervisor" placeholder="e.g. Ahmed Al Mansouri"></div></div>
     <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Basic Salary (AED)</label><input class="fi mono" id="emp-salary"></div><div class="fg"><label class="fl">OT Policy</label><select class="fi" id="emp-ot-rate"><option value="system-default">— System Default (from HR Settings) —</option><option value="fixed">Fixed Rate</option><option value="monthly">Monthly-Based Rate</option><option value="other">Other / Custom</option></select></div><div class="fg"><label class="fl">Leave Policy</label><select class="fi" id="emp-leave-policy"><option value="">— Select Leave Policy —</option></select></div></div>
+    <div class="fr3"><div class="fg"><label class="fl">Carried-forward Leave (days)</label><input class="fi mono" id="emp-leave-carry" type="number" min="0" step="0.5" placeholder="0"></div><div class="fg" style="grid-column:span 2"><label class="fl">&nbsp;</label><div style="font-size:12px;color:var(--text3);line-height:1.5;padding-top:4px">Unused Annual Leave brought from last year. Added to this leave year's balance, up to the Annual Leave "Max Carry", and usable until the Carry-Forward Deadline (HR Settings → Leave Policy).</div></div></div>
     <div class="fr3"><div class="fg"><label class="fl" data-currency-label>Housing Allowance (AED)</label><input class="fi mono" id="emp-housing-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl" data-currency-label>Transport Allowance (AED)</label><input class="fi mono" id="emp-transport-allowance" type="number" min="0" step="0.01" value="0"></div><div class="fg"><label class="fl" data-currency-label>Other Allowance (AED)</label><input class="fi mono" id="emp-other-allowance" type="number" min="0" step="0.01" value="0"></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Shift Hours</label><select class="fi" id="emp-shift-hours-type"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div><div class="fg"><label class="fl">Hours</label><input class="fi mono" id="emp-shift-hours" type="number" min="0" placeholder="e.g. 40"></div><div class="fg"><label class="fl">Work Location</label><select class="fi" id="emp-location"><option value="">— Select Location —</option></select></div></div>
     <div class="fr3"><div class="fg"><label class="fl">Work Permit No.</label><input class="fi mono" id="emp-work-permit"></div><div class="fg"><label class="fl">Visa Expiry</label><input class="fi" id="emp-visa-expiry" type="date"></div><div class="fg"><label class="fl">Cost Center</label><input class="fi" id="emp-cost-center" placeholder="e.g. CC-01-OPS"></div></div>
@@ -3302,7 +3303,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=988560a636" defer></script>
+<script src="src/app.js?v=cb93ea010b" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
