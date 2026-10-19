@@ -233,8 +233,19 @@
       </div>
 
       <div class="field">
-        <label>Email Address <span class="req">*</span></label>
-        <input id="email" type="email" placeholder="you@company.com" autocomplete="email">
+        <label>Email Address <span class="req">*</span> <span style="font-weight:400;color:#6b7a99">(your username)</span></label>
+        <input id="email" type="email" placeholder="you@company.com" autocomplete="username">
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>Password <span class="req">*</span></label>
+          <input id="password" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label>Confirm Password <span class="req">*</span></label>
+          <input id="password2" type="password" placeholder="Type it again" autocomplete="new-password">
+        </div>
       </div>
 
       <div class="field">
@@ -271,13 +282,13 @@
         <textarea id="message" placeholder="Tell us a bit about what you're looking for..."></textarea>
       </div>
 
-      <button id="btn" class="btn" onclick="requestTrial()">Request My Free Trial</button>
+      <button id="btn" class="btn" onclick="requestTrial()">Start My 3-Day Free Trial</button>
     </div>
 
     <div id="success-box" class="success-box">
       <div class="s-icon">🎉</div>
-      <h3>Request received!</h3>
-      <p>Thanks for your interest — our team will reach out shortly to set up your 3-day free trial.</p>
+      <h3>Your trial is ready!</h3>
+      <p>Your 3-day free trial has started. Signing you in…</p>
     </div>
 
     <div class="signin-link">Already have an account? <a href="/login">Sign in</a></div>
@@ -302,12 +313,9 @@
     return window.location.protocol+'//'+h+'/api/v1';
   }
 
-  // GCC + UK — the markets this deployment serves. Country picked here
-  // only drives the phone prefix/flag shown next to the phone field and is
-  // passed along as context in the trial request's notes — this form no
-  // longer creates a company/account, so there's no currency/VAT default
-  // to apply here anymore (that happens later when the team actually
-  // creates the account via Super Admin > Create Company).
+  // GCC + UK — the markets this deployment serves. The country picked here drives the
+  // phone prefix/flag and is sent with the sign-up: the new company gets that country's
+  // currency and VAT rate (POST /auth/register).
   var SIGNUP_COUNTRIES=[
     {name:'United Arab Emirates',flag:'ae',code:'+971'},
     {name:'Saudi Arabia',flag:'sa',code:'+966'},
@@ -349,41 +357,49 @@
     if(!fullName){show('Please enter your full name.');return;}
     if(!company){show('Please enter your company name.');return;}
     if(!email||!email.includes('@')){show('Please enter a valid email address.');return;}
+    var password=document.getElementById('password').value;
+    var password2=document.getElementById('password2').value;
+    if(password.length<8){show('Please choose a password of at least 8 characters.');return;}
+    if(password!==password2){show('The two passwords do not match.');return;}
 
-    btn.disabled=true;btn.textContent='Sending…';
+    btn.disabled=true;btn.textContent='Creating your account…';
 
-    // No account/login is created here — this only notifies the super
-    // admin of an inbound lead (Super Admin > Trial Requests). Account
-    // creation for a company is a separate, manual step the team does
-    // after following up, not an instant self-serve action from this page.
+    // Creates the company and its admin login with a 3-day trial (POST /auth/register,
+    // which also lists the sign-up under Super Admin > Trial Requests), then signs in.
     try{
-      var resp=await fetch(apiBase()+'/auth/trial-request',{
+      var resp=await fetch(apiBase()+'/auth/register',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          full_name:fullName,company_name:company,email:email,
-          phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null,
-          // TrialRequestIn has no dedicated country field — folded into
-          // notes instead of dropped, so the follow-up team still sees it.
-          notes:(country?'Country: '+country:'')+(country&&message?'\n\n':'')+(message||'')||null
+          full_name:fullName,company_name:company,email:email,password:password,country:country||null,
+          phone:phone?phoneCode+' '+phone:null,employee_count:empCount||null,notes:message||null
         })
       });
       var data=await resp.json().catch(function(){return{};});
-      if(resp.ok){
+      if(resp.ok&&data.access_token){
+        try{
+          localStorage.setItem('taxflow_token',data.access_token);
+          localStorage.setItem('taxflow_principal_kind','user');
+        }catch(e){}
         document.getElementById('form-body').style.display='none';
         document.getElementById('success-box').style.display='block';
-      }else{
-        var msg='Could not send your request. Please try again.';
-        if(Array.isArray(data.detail)&&data.detail.length){
-          msg=data.detail.map(function(d){return d&&d.msg?d.msg:JSON.stringify(d);}).join(' ');
-        }else if(typeof data.detail==='string'&&data.detail){
-          msg=data.detail;
-        }
-        show(msg);
-        btn.disabled=false;btn.textContent='Request My Free Trial';
+        setTimeout(function(){window.location.replace('/');},900);
+        return;
       }
+      var msg='Could not create your account. Please try again.';
+      if(resp.status===409){
+        msg='This email cannot be used to start a trial. If you already have an account, sign in instead.';
+      }else if(resp.status===429){
+        msg='Too many sign-ups from this connection. Please try again later.';
+      }else if(Array.isArray(data.detail)&&data.detail.length){
+        msg=data.detail.map(function(d){return d&&d.msg?d.msg:JSON.stringify(d);}).join(' ');
+      }else if(typeof data.detail==='string'&&data.detail){
+        msg=data.detail;
+      }
+      show(msg);
+      btn.disabled=false;btn.textContent='Start My 3-Day Free Trial';
     }catch(e){
       show('Cannot reach server. Please try again.');
-      btn.disabled=false;btn.textContent='Request My Free Trial';
+      btn.disabled=false;btn.textContent='Start My 3-Day Free Trial';
     }
   }
 

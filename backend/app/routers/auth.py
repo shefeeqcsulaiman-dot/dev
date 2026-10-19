@@ -96,6 +96,16 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
         role="admin",
     )
     db.add(user)
+    # Every self-service sign-up also shows in Super Admin > Trial Requests (already an
+    # account, so "converted"), so the team can follow up as with a demo request.
+    db.add(TrialRequest(
+        full_name=payload.full_name.strip(), company_name=payload.company_name.strip(),
+        email=payload.email.lower(), phone=payload.phone, employee_count=payload.employee_count,
+        notes="\n\n".join(n for n in (f"Self-service trial account, 3 days (until {trial_expires})."
+                                       + (f" Country: {country}." if payload.country else ""),
+                                       (payload.notes or "").strip()) if n) or None,
+        status="converted",
+    ))
     db.commit()
     db.refresh(user)
     return Token(access_token=create_access_token(user.id))

@@ -35,6 +35,8 @@ class RegisterRequest(BaseModel):
     # stored anywhere inside register() itself, so there's no downstream
     # numeric-use to preserve; str just needs to not reject the real input.
     employee_count: str | None = None
+    # The sign-up page's "message" box: kept on the Trial Requests entry for the team.
+    notes: str | None = Field(default=None, max_length=2000)
     plan: str = "starter"
 
     @field_validator("trn")
