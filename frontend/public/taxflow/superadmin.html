@@ -483,6 +483,7 @@
       <div style="display:flex;gap:8px">
         <button class="btn btn-g btn-sm" onclick="exportCompaniesCSV(this)" title="Every company matching the search and status filter">Export CSV</button>
         <button class="btn btn-g btn-sm" onclick="openBulkModule()" title="Turn one module on or off for every company at once (e.g. DB Backup)">⚙ Module for all companies</button>
+        <button class="btn btn-g btn-sm" onclick="openRestoreBackup()" title="Upload a company backup (.sql or .sql.gz) and restore it as a new company">⤒ Restore from backup…</button>
         <button class="btn btn-p btn-sm" onclick="openCreateCompany()">+ New Company</button>
       </div>
     </div>
@@ -889,6 +890,31 @@
     <div class="modal-foot">
       <button class="btn btn-g" onclick="closeModal('m-edit-user')">Cancel</button>
       <button class="btn btn-p" id="edit-user-btn" onclick="doEditUser()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restore from backup Modal (POST /superadmin/restore-backup, app/backup_restore.py) -->
+<div class="overlay" id="m-restore" onclick="if(event.target===this&&!window._restoreBusy)closeModal('m-restore')">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">Restore from backup</div>
+    <div class="modal-sub">Creates a <b>new company</b> from a backup file. The original company is not changed.</div>
+    <div id="restore-err" class="err-msg"></div>
+    <div id="restore-form">
+      <div class="fg"><label class="fl">Backup file (.sql or .sql.gz)</label><input class="fi" id="restore-file" type="file" accept=".sql,.gz,.sql.gz,application/gzip,text/plain"></div>
+      <div class="fg"><label class="fl">Company name <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="fi" id="restore-name" placeholder="Default: original name (restored date)"></div>
+      <div class="fg"><label class="fl">New admin email</label><input class="fi" id="restore-email" type="email" placeholder="admin@company.com" autocomplete="off"></div>
+      <div class="fg"><label class="fl">New admin password</label><input class="fi" id="restore-password" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:4px">Copied: records, documents, ledger, VAT, employees, payroll, leave and attendance. Not copied: user, ESS and branch logins (set them again in the new company).</div>
+    </div>
+    <div id="restore-progress" style="display:none;margin-top:6px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="restore-step">Uploading…</div>
+      <div style="height:8px;border-radius:6px;background:var(--border);overflow:hidden"><div id="restore-bar" style="height:100%;width:0;background:var(--primary);transition:width .3s"></div></div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:10px" id="restore-detail"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-g" id="restore-cancel" onclick="closeModal('m-restore')">Cancel</button>
+      <button class="btn btn-p" id="restore-btn" onclick="startRestoreBackup()">Upload and restore</button>
     </div>
   </div>
 </div>
@@ -2261,6 +2287,95 @@
           <div style="font-size:12px;color:var(--muted);line-height:1.6">${(j.log||[]).map(l=>'✓ '+escHtml(l)).join('<br>')}</div>`;
         if(!done)setTimeout(tick,4000);
       }catch(err){setTimeout(tick,8000);}
+    };
+    tick();
+  }
+
+  // ── Restore from backup (POST /superadmin/restore-backup, app/backup_restore.py) ──
+  function openRestoreBackup(){
+    if(window._restoreBusy){ openModal('m-restore'); return; }
+    ['restore-file','restore-name','restore-email','restore-password'].forEach(id=>{document.getElementById(id).value='';});
+    document.getElementById('restore-err').style.display='none';
+    document.getElementById('restore-form').style.display='';
+    document.getElementById('restore-progress').style.display='none';
+    const btn=document.getElementById('restore-btn');
+    btn.style.display=''; btn.disabled=false; btn.textContent='Upload and restore';
+    document.getElementById('restore-cancel').textContent='Cancel';
+    openModal('m-restore');
+  }
+  function _restoreShow(step, pct, detail, color){
+    document.getElementById('restore-form').style.display='none';
+    document.getElementById('restore-progress').style.display='';
+    const st=document.getElementById('restore-step');
+    st.textContent=step; st.style.color=color||'';
+    const bar=document.getElementById('restore-bar');
+    bar.style.width=Math.max(0,Math.min(100,pct))+'%';
+    bar.style.background=color||'var(--primary)';
+    document.getElementById('restore-detail').innerHTML=detail||'';
+  }
+  function _restoreBackToForm(msg){
+    window._restoreBusy=false;
+    document.getElementById('restore-btn').disabled=false;
+    document.getElementById('restore-cancel').textContent='Cancel';
+    document.getElementById('restore-form').style.display='';
+    document.getElementById('restore-progress').style.display='none';
+    const errEl=document.getElementById('restore-err');
+    errEl.textContent=msg; errEl.style.display='block';
+  }
+  function startRestoreBackup(){
+    const errEl=document.getElementById('restore-err');
+    const fail=msg=>{errEl.textContent=msg;errEl.style.display='block';};
+    errEl.style.display='none';
+    const file=document.getElementById('restore-file').files[0];
+    const email=document.getElementById('restore-email').value.trim();
+    const pwd=document.getElementById('restore-password').value;
+    if(!file)return fail('Choose a backup file');
+    if(!/\.(sql|gz)$/i.test(file.name))return fail('Choose a .sql or .sql.gz backup file');
+    if(file.size>200*1024*1024)return fail('The backup file is over 200 MB');
+    if(!email||!email.includes('@'))return fail('Enter the new admin email');
+    if(pwd.length<8)return fail('The admin password needs at least 8 characters');
+    const fd=new FormData();
+    fd.append('file',file); fd.append('admin_email',email); fd.append('admin_password',pwd);
+    fd.append('name',document.getElementById('restore-name').value.trim());
+    document.getElementById('restore-btn').disabled=true; window._restoreBusy=true;
+    document.getElementById('restore-cancel').textContent='Hide';
+    const label=escHtml(file.name)+' · '+(file.size/1048576).toFixed(1)+' MB';
+    _restoreShow('Uploading…',0,label);
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST',apiBase()+'/superadmin/restore-backup');
+    xhr.setRequestHeader('Authorization','Bearer '+localStorage.getItem('taxflow_token'));
+    xhr.upload.onprogress=e=>{ if(e.lengthComputable)_restoreShow('Uploading… '+Math.round(e.loaded*100/e.total)+'%',e.loaded*30/e.total,label); };
+    xhr.onerror=()=>_restoreBackToForm('Upload failed: check the connection and try again');
+    xhr.onload=()=>{
+      let d={}; try{ d=JSON.parse(xhr.responseText||'{}'); }catch(e){}
+      if(xhr.status===401){ saLogout(); return; }
+      if(xhr.status<200||xhr.status>=300)return _restoreBackToForm(d.detail||('Upload failed ('+xhr.status+')'));
+      pollRestore(d.job_id);
+    };
+    xhr.send(fd);
+  }
+  function pollRestore(jobId){
+    const tick=async()=>{
+      let j;
+      try{ j=await (await apiFetch(`/superadmin/restore-backup/${encodeURIComponent(jobId)}`)).json(); }
+      catch(err){ setTimeout(tick,6000); return; }
+      const counts=Object.entries(j.counts||{}).filter(([,n])=>n).map(([t,n])=>`${escHtml(t.replace(/_/g,' '))}: <b>${Number(n).toLocaleString()}</b>`).join(' · ');
+      const skipped=Object.entries(j.skipped||{}).filter(([,n])=>n).map(([t,n])=>`${escHtml(t.replace(/_/g,' '))} ${n}`).join(', ');
+      const notes=(j.notes||[]).slice(0,8).map(n=>'• '+escHtml(n)).join('<br>');
+      if(j.status==='running'){
+        _restoreShow('Restoring: '+(j.step||'')+' ('+(j.progress||0)+'%)',30+(j.progress||0)*0.7,counts);
+        setTimeout(tick,2000); return;
+      }
+      window._restoreBusy=false;
+      document.getElementById('restore-btn').style.display='none';
+      document.getElementById('restore-cancel').textContent='Close';
+      if(j.status==='done'){
+        _restoreShow('Done: "'+(j.company_name||'new company')+'" created',100,
+          counts+(skipped?'<br>Skipped (pointing at data not in the backup): '+skipped:'')+(notes?'<br>'+notes:''),'var(--green)');
+        if(typeof loadCompaniesPage==='function')loadCompaniesPage();
+      }else{
+        _restoreShow('Failed: nothing was created',100,escHtml(j.error||'Unknown error'),'var(--red)');
+      }
     };
     tick();
   }

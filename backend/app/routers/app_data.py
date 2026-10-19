@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 from sqlalchemy import and_, case, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 from starlette.concurrency import run_in_threadpool
 
 import app.cache as cache
@@ -1721,7 +1721,8 @@ def iter_company_sql_dump(db: Session, company_id: str, exported_by: str) -> Ite
     # real Tier 1 tables were never queried here either, so a "full backup"
     # SQL dump silently had no leave or attendance history in it at all.
     rows_leave = (
-        db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id).order_by(LeaveRequest.start_date.asc()).all()
+        db.query(LeaveRequest).options(undefer(LeaveRequest.attachment))
+        .filter(LeaveRequest.company_id == company_id).order_by(LeaveRequest.start_date.asc()).all()
     )
     rows_att = (
         db.query(AttendanceDetail).filter(AttendanceDetail.company_id == company_id).order_by(AttendanceDetail.work_date.asc()).all()
@@ -1788,43 +1789,29 @@ def iter_company_sql_dump(db: Session, company_id: str, exported_by: str) -> Ite
             db.expunge(r)
         yield "\n"
 
-    if rows_inv:
-        cols = ["id", "company_id", "invoice_number", "customer_name", "customer_trn",
-                "issue_date", "due_date", "currency", "subtotal", "vat", "total",
-                "status", "notes", "created_at", "updated_at"]
-        yield (f"-- invoices ({len(rows_inv)} rows)\n")
-        for r in rows_inv:
-            yield (_insert("invoices", cols, r))
-        yield ("\n")
-
-    if rows_il:
-        cols = ["id", "invoice_id", "description", "quantity", "unit_price", "vat_rate", "line_total"]
-        yield (f"-- invoice_lines ({len(rows_il)} rows)\n")
-        for r in rows_il:
-            yield (_insert("invoice_lines", cols, r))
-        yield ("\n")
-
-    if rows_acc:
-        cols = ["id", "company_id", "code", "name", "type", "is_group", "parent_id", "created_at", "updated_at"]
-        yield (f"-- accounts ({len(rows_acc)} rows)\n")
-        for r in rows_acc:
-            yield (_insert("accounts", cols, r))
-        yield ("\n")
-
-    # Tables dumped by reflection (every mapped column) so a schema change
-    # can't silently drop a column. Order respects foreign keys; the GL
-    # block below references journal_entries.
-    def _dump_model(model: Any, rows: list[Any]) -> Iterator[str]:
+    # Every table by reflection (every mapped column) so a schema change can't silently
+    # drop a column -- the hand-written lists this replaced named columns the tables
+    # never had (accounts.parent_id, invoices.customer_trn...) and left out real ones
+    # (invoice dates, leave sick notes, employee allowances...). Login secrets are left
+    # out. Order respects foreign keys (Super Admin > Restore from backup reads it back,
+    # app/backup_restore.py).
+    def _dump_model(model: Any, rows: list[Any], skip: tuple[str, ...] = ()) -> Iterator[str]:
         if not rows:
             return
         table = model.__tablename__
-        cols = [c.key for c in model.__mapper__.column_attrs]
+        cols = [c.key for c in model.__mapper__.column_attrs if c.key not in skip]
         yield f"-- {table} ({len(rows)} rows)\n"
         for r in rows:
             yield _insert(table, cols, r)
         yield "\n"
 
-    yield from _dump_model(Branch, db.query(Branch).filter(Branch.company_id == company_id).all())
+    from app.models import TaxCode
+    yield from _dump_model(Invoice, rows_inv)
+    yield from _dump_model(InvoiceLine, rows_il)
+    yield from _dump_model(Account, rows_acc)
+    yield from _dump_model(TaxCode, db.query(TaxCode).filter(TaxCode.company_id == company_id).all())
+    yield from _dump_model(Branch, db.query(Branch).filter(Branch.company_id == company_id).all(),
+                           skip=("username", "password_hash", "password_changed_at"))
     je_rows = db.query(JournalEntry).filter(JournalEntry.company_id == company_id).all()
     yield from _dump_model(JournalEntry, je_rows)
     je_ids = [j.id for j in je_rows]
@@ -1832,69 +1819,21 @@ def iter_company_sql_dump(db: Session, company_id: str, exported_by: str) -> Ite
     yield from _dump_model(StockProductMapping, db.query(StockProductMapping).filter(StockProductMapping.company_id == company_id).all())
     yield from _dump_model(StockMovement, db.query(StockMovement).filter(StockMovement.company_id == company_id).all())
     yield from _dump_model(PeriodLock, db.query(PeriodLock).filter(PeriodLock.company_id == company_id).all())
-
-    if rows_emp:
-        cols = ["id", "company_id", "employee_no", "full_name", "department", "designation", "basic_salary", "status", "created_at", "updated_at"]
-        yield (f"-- employees ({len(rows_emp)} rows)\n")
-        for r in rows_emp:
-            yield (_insert("employees", cols, r))
-        yield ("\n")
-
-    if rows_audit:
-        cols = ["id", "company_id", "user_id", "action", "module", "record_id", "created_at"]
-        yield (f"-- audit_logs ({len(rows_audit)} rows)\n")
-        for r in rows_audit:
-            yield (_insert("audit_logs", cols, r))
-        yield ("\n")
-
-    if rows_st:
-        cols = ["id", "company_id", "module", "reference", "party_name", "subtotal", "vat", "total", "status", "created_at", "updated_at"]
-        yield (f"-- source_transactions ({len(rows_st)} rows)\n")
-        for r in rows_st:
-            yield (_insert("source_transactions", cols, r))
-        yield ("\n")
-
-    if rows_gl:
-        cols = ["id", "company_id", "branch_id", "entry_date", "voucher_no", "voucher_type",
-                "account_id", "journal_entry_id", "journal_line_id", "debit", "credit",
-                "balance", "party", "cost_center", "narration"]
-        yield (f"-- general_ledger_entries ({len(rows_gl)} rows)\n")
-        for r in rows_gl:
-            yield (_insert("general_ledger_entries", cols, r))
-        yield ("\n")
-
-    if rows_pr:
-        cols = ["id", "company_id", "branch_id", "period", "status", "gross_total", "deductions_total", "net_total", "created_at", "updated_at"]
-        yield (f"-- payroll_runs ({len(rows_pr)} rows)\n")
-        for r in rows_pr:
-            yield (_insert("payroll_runs", cols, r))
-        yield ("\n")
-
-    if rows_pi:
-        cols = ["id", "run_id", "employee_id", "basic", "allowances", "overtime", "deductions", "net_pay", "wps_status"]
-        yield (f"-- payroll_items ({len(rows_pi)} rows)\n")
-        for r in rows_pi:
-            yield (_insert("payroll_items", cols, r))
-        yield ("\n")
-
-    if rows_leave:
-        cols = ["id", "company_id", "employee_id", "leave_type", "start_date", "end_date", "days",
-                "reason", "status", "approved_by", "approved_by_employee_id", "approved_at", "created_at", "updated_at"]
-        yield (f"-- leave_requests ({len(rows_leave)} rows)\n")
-        for r in rows_leave:
-            yield (_insert("leave_requests", cols, r))
-        yield ("\n")
-
-    if rows_att:
-        cols = ["id", "company_id", "employee_id", "employee_name", "work_date",
-                "clock_in_1", "clock_out_1", "work_seconds_1", "clock_in_2", "clock_out_2", "work_seconds_2",
-                "clock_in_3", "clock_out_3", "work_seconds_3", "clock_in_4", "clock_out_4", "work_seconds_4",
-                "clock_in_5", "clock_out_5", "work_seconds_5", "total_seconds", "ot_seconds", "under_seconds",
-                "session_count", "raw_events", "created_at", "updated_at"]
-        yield (f"-- attendance_details ({len(rows_att)} rows)\n")
-        for r in rows_att:
-            yield (_insert("attendance_details", cols, r))
-        yield ("\n")
+    yield from _dump_model(Employee, rows_emp, skip=("username", "password_hash", "password_changed_at", "last_login",
+                                                     "last_activity", "role_id", "work_location_id"))
+    yield from _dump_model(AuditLog, rows_audit)
+    # Source transactions, their lines and VAT lines: the VAT return reads tax_lines.
+    yield from _dump_model(SourceTransaction, rows_st)
+    st_ids = [r.id for r in rows_st]
+    yield from _dump_model(SourceTransactionLine, [
+        line for start in range(0, len(st_ids), 500)
+        for line in db.query(SourceTransactionLine).filter(SourceTransactionLine.source_id.in_(st_ids[start:start + 500]))])
+    yield from _dump_model(TaxLine, db.query(TaxLine).filter(TaxLine.company_id == company_id).all())
+    yield from _dump_model(GeneralLedgerEntry, rows_gl)
+    yield from _dump_model(PayrollRun, rows_pr)
+    yield from _dump_model(PayrollItem, rows_pi)
+    yield from _dump_model(LeaveRequest, rows_leave)
+    yield from _dump_model(AttendanceDetail, rows_att)
 
     yield ("COMMIT;\n")
     yield (

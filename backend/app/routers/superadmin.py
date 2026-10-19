@@ -1,10 +1,11 @@
 import datetime as _dt
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import and_, case, func, or_, select, text
@@ -1635,6 +1636,63 @@ def start_demo_data(company_id: str, payload: DemoDataIn, db: Session = Depends(
 def demo_data_status(job_id: str, _: User = Depends(_require_superadmin)):
     from app import demo_data
     job = demo_data.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/restore-backup")
+async def restore_backup(
+    file: UploadFile = File(...),
+    admin_email: str = Form(...),
+    admin_password: str = Form(...),
+    name: str = Form(""),
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    """Upload a company backup (.sql or .sql.gz, as Download Backup or the nightly backups
+    write it) and restore it into a NEW company in the background (app/backup_restore.py).
+    The original company is never changed. Poll GET /restore-backup/{job_id}."""
+    import tempfile
+
+    from app import backup_restore
+
+    email = admin_email.strip().lower()
+    if "@" not in email or len(email) > 255:
+        raise HTTPException(status_code=422, detail="Enter a valid admin email")
+    if len(admin_password) < 8:
+        raise HTTPException(status_code=422, detail="The admin password needs at least 8 characters")
+    if db.query(User.id).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="That admin email is already registered")
+    if backup_restore.restore_running():
+        raise HTTPException(status_code=409, detail="Another restore is running; try again when it has finished")
+    tmp = tempfile.NamedTemporaryFile(prefix="taxflow-restore-", suffix=".sql", delete=False)
+    size = 0
+    try:
+        with tmp:
+            while chunk := await file.read(1 << 20):
+                size += len(chunk)
+                if size > backup_restore.MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="The backup file is over 200 MB")
+                tmp.write(chunk)
+        if not size:
+            raise HTTPException(status_code=400, detail="The file is empty")
+        job = backup_restore.start(tmp.name, email, admin_password, name, superadmin.email)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except BaseException:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        raise
+    return {"job_id": job["id"], "status": job["status"]}
+
+
+@router.get("/restore-backup/{job_id}")
+def restore_backup_status(job_id: str, _: User = Depends(_require_superadmin)):
+    from app import backup_restore
+    job = backup_restore.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
