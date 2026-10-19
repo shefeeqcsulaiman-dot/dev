@@ -605,6 +605,7 @@ function appConfirm({title='Confirm Action',message='Please confirm this action.
   const ok=overlay.querySelector('#app-confirm-ok');
   const cancel=overlay.querySelector('#app-confirm-cancel');
   cancel.textContent=cancelText;
+  cancel.style.display=cancelText?'':'none';
   overlay.querySelector('#app-confirm-title').textContent=title;
   const msgEl=overlay.querySelector('#app-confirm-message');
   if(messageHtml){
@@ -19514,6 +19515,37 @@ async function loadLeaveRequests(){
   }
 }
 
+// Other requests (approved or pending) whose dates overlap this one, from colleagues in the
+// same department -- everyone when the employee has no department.
+function leaveClashes(rec){
+  const from=String(rec.start_date||''), to=String(rec.end_date||rec.start_date||'');
+  if(!from)return [];
+  const dept=String(rec.department||'').trim().toLowerCase();
+  return _leaveRequestsCache.filter(o=>o.id!==rec.id&&o.employee_id!==rec.employee_id
+    &&(o.status==='approved'||o.status==='pending')
+    &&(!dept||String(o.department||'').trim().toLowerCase()===dept)
+    &&String(o.start_date||'')<=to&&String(o.end_date||o.start_date||'')>=from);
+}
+
+function showLeaveClash(id){
+  const rec=_leaveRequestsCache.find(r=>r.id===id);
+  if(!rec)return;
+  const rows=leaveClashes(rec).sort((a,b)=>(a.status==='approved'?0:1)-(b.status==='approved'?0:1)||String(a.start_date).localeCompare(String(b.start_date)));
+  const who=rec.department?`in ${escapeHtml(rec.department)}`:'in the company';
+  const body=rows.map(o=>`<tr><td style="padding:6px 8px">${escapeHtml(o.employee_name)}</td>
+    <td style="padding:6px 8px">${escapeHtml(o.leave_type||'')}</td>
+    <td style="padding:6px 8px;white-space:nowrap">${escapeHtml(o.start_date)} → ${escapeHtml(o.end_date||o.start_date)}</td>
+    <td style="padding:6px 8px"><span class="b ${o.status==='approved'?'b-g':'b-a'}" style="text-transform:capitalize">${escapeHtml(o.status)}</span></td></tr>`).join('');
+  appConfirm({
+    title:'Others on leave at the same time',
+    messageHtml:`<div style="margin-bottom:8px">${escapeHtml(rec.employee_name)} asked for ${escapeHtml(rec.start_date)} → ${escapeHtml(rec.end_date||rec.start_date)}. Colleagues ${who} on leave in those dates:</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3)">
+      <th style="padding:6px 8px">Employee</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Dates</th><th style="padding:6px 8px">Status</th>
+      </tr></thead><tbody>${body}</tbody></table>`,
+    okText:'Close',cancelText:'',tone:'primary',
+  });
+}
+
 function renderLeaveTable(){
   const tbody=document.getElementById('leave-tbody');
   if(!tbody)return;
@@ -19532,8 +19564,11 @@ function renderLeaveTable(){
       :rec.status==='approved'?cancelBtn:'';
     const cancelInfo=rec.status==='cancelled'
       ?`Cancelled${rec.cancelled_by?' by '+rec.cancelled_by:''}${rec.cancelled_at?' on '+rec.cancelled_at.slice(0,10):''}${rec.cancel_reason?' — '+rec.cancel_reason:''}`:'';
-    return `<tr data-record-id="${id}">
-      <td>${escapeHtml(rec.employee_name)}</td>
+    // A pending request that overlaps a colleague's approved leave is shown in red.
+    const onLeave=rec.status==='pending'?leaveClashes(rec).filter(o=>o.status==='approved').length:0;
+    const clash=onLeave?`<div><button type="button" class="leave-clash-btn" onclick="showLeaveClash('${id}')" title="Colleagues already on leave in these dates">⚠ ${onLeave} already on leave · View details</button></div>`:'';
+    return `<tr data-record-id="${id}"${onLeave?' class="leave-clash"':''}>
+      <td>${escapeHtml(rec.employee_name)}${clash}</td>
       <td><span class="b ${typeCls}">${escapeHtml(rec.leave_type?.replace(' Leave','')||rec.leave_type)}</span>${rec.attachment_name?` <button type="button" class="btn btn-g btn-sm" style="padding:2px 6px" onclick="openLeaveAttachment('${id}')" title="Sick note: ${escapeHtml(rec.attachment_name)}">📎</button>`:''}</td>
       <td>${escapeHtml(rec.start_date)}</td>
       <td>${escapeHtml(rec.end_date)}</td>

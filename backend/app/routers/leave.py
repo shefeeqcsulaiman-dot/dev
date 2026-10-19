@@ -466,6 +466,9 @@ class LeaveRequestOut(BaseModel):
     cancelled_by: str | None = None
     cancel_reason: str | None = None
     attachment_name: str | None = None
+    # The employee's department: the HRMS list flags a pending request that overlaps
+    # approved leave of someone in the same department.
+    department: str | None = None
 
 
 def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
@@ -477,6 +480,7 @@ def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
         cancelled_at=r.cancelled_at.isoformat() if r.cancelled_at else None,
         cancelled_by=r.cancelled_by, cancel_reason=r.cancel_reason,
         attachment_name=r.attachment_name,
+        department=emp.department if emp else None,
     )
 
 

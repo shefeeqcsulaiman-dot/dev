@@ -143,3 +143,20 @@ def _full_year_entitlement(monkeypatch):
     before accrual (tests/test_leave_accrual.py covers accrual)."""
     from app.routers import leave as _leave
     monkeypatch.setattr(_leave, "accrued_days", lambda settings, yearly, join_date, on: yearly)
+
+
+def test_leave_request_list_carries_department(client, db, auth_headers):
+    """The HRMS Leave list flags a pending request overlapping a colleague's approved leave
+    in the same department, so each request carries its employee's department."""
+    import uuid
+
+    cid = _company_id(client, auth_headers)
+    tag = uuid.uuid4().hex[:6]
+    a = _seed_employee(db, cid, f"LV-D-{tag}-A", "Dept A One")
+    b = _seed_employee(db, cid, f"LV-D-{tag}-B", "Dept A Two")
+    a.department = b.department = f"Stores {tag}"
+    db.commit()
+    _seed_leave_request(db, cid, a.id, "Annual Leave", "2031-03-02", "2031-03-05", 4, status="approved")
+    req = _seed_leave_request(db, cid, b.id, "Annual Leave", "2031-03-04", "2031-03-06", 3)
+    rows = {r["id"]: r for r in client.get("/api/v1/leave/requests", headers=auth_headers).json()}
+    assert rows[req.id]["department"] == f"Stores {tag}"
