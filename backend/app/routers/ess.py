@@ -267,6 +267,32 @@ def ess_team(request: Request, db: Session = Depends(get_db)) -> list[EssTeamMem
     ]
 
 
+@router.get("/team/leave-requests")
+def ess_team_leave_requests(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    """Pending leave requests in the departments the logged-in employee's role is scoped to
+    (the same rule as /ess/team: a supervisor), not their own -- for their notification
+    bell. Anyone else gets an empty list (the bell asks for everyone)."""
+    emp = ess_bearer(request, db)
+    role = db.get(Role, emp.role_id) if emp.role_id else None
+    departments = resolve_department_scope(role, emp)
+    if not departments:
+        return []
+    rows = (
+        db.query(LeaveRequest, Employee)
+        .join(Employee, Employee.id == LeaveRequest.employee_id)
+        .filter(LeaveRequest.company_id == emp.company_id, LeaveRequest.status == "pending",
+                Employee.department.in_(departments), Employee.id != emp.id)
+        .order_by(LeaveRequest.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [{
+        "id": r.id, "employee_name": e.full_name, "department": e.department, "leave_type": r.leave_type,
+        "start_date": r.start_date, "end_date": r.end_date, "days": r.days,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    } for r, e in rows]
+
+
 def _team_photo_url(emp: Employee) -> str | None:
     photo = emp.photo or ""
     if not photo.startswith("data:"):

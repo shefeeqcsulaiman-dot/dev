@@ -5,7 +5,7 @@
 - recount_leave_requests() re-applies the rules to existing requests."""
 import json
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from app.models import AppDataRecord, Employee, LeaveRequest
 from app.routers import leave
@@ -127,5 +127,30 @@ def test_recount_applies_the_rules_to_existing_requests(client, db, auth_headers
         assert leave.recount_leave_requests(db, cid, date(2026, 1, 1)) >= 1
         db.refresh(req)
         assert req.days == 5   # Mon 2 .. Fri 6 Nov; the weekend skipped
+    finally:
+        _settings(client, auth_headers)
+
+
+def test_next_year_leave_can_use_next_years_whole_entitlement(client, db, auth_headers):
+    """Booked in advance, leave in the next leave year is checked against that year's
+    whole entitlement -- not only what is earned by its start date (a January holiday
+    booked in December). This year's leave still follows the monthly earning."""
+    cid = _company_id(client, auth_headers)
+    _settings(client, auth_headers, accrual="Monthly (1/12 per month)",
+              leave_policies=[{"value": "UAE 30 Calendar", "days": 30, "basis": "Calendar"}])
+    emp = _employee(client, db, auth_headers, cid, leave_policy="UAE 30 Calendar", join_date="2020-01-01")
+    try:
+        start = date(date.today().year + 1, 1, 10)
+        r = client.post("/api/v1/leave/requests", headers=auth_headers, json={
+            "employee_id": emp.id, "leave_type": "Annual Leave",
+            "start_date": start.isoformat(), "end_date": (start + timedelta(days=9)).isoformat()})
+        assert r.status_code == 201, r.text                     # 10 days in January: was 2.5 earned
+        r = client.post(f"/api/v1/leave/requests/{r.json()['id']}/approve", headers=auth_headers)
+        assert r.status_code == 200, r.text                     # approval uses the same rule
+        big = start + timedelta(days=30)
+        r = client.post("/api/v1/leave/requests", headers=auth_headers, json={
+            "employee_id": emp.id, "leave_type": "Annual Leave",
+            "start_date": big.isoformat(), "end_date": (big + timedelta(days=24)).isoformat()})
+        assert r.status_code == 400 and "available" in r.json()["detail"]   # 10 + 25 > 30 for the year
     finally:
         _settings(client, auth_headers)

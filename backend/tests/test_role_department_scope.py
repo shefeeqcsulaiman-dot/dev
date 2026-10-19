@@ -148,3 +148,32 @@ def test_hr_me_reports_department_scope(client, auth_headers, db):
     r = client.get("/api/v1/hr/me", headers=headers)
     assert r.status_code == 200, r.text
     assert r.json()["department_scope"] == ["HR"]
+
+
+def test_supervisor_bell_lists_team_pending_leave(client, auth_headers, db):
+    """GET /ess/team/leave-requests: a supervisor (role scoped to departments) hears about
+    pending leave in those departments, not their own nor other departments'; anyone
+    without a scoped role gets an empty list."""
+    import uuid
+
+    from app.models import LeaveRequest
+
+    company_id = _company_id(client, auth_headers)
+    tag = uuid.uuid4().hex[:6]
+    dept = f"Bakery {tag}"
+    member = _seed_employee(db, company_id, f"BK-{tag}-1", "Bakery Member", department=dept)
+    other = _seed_employee(db, company_id, f"BK-{tag}-2", "Other Dept", department=f"Butchery {tag}")
+    boss = _seed_employee(db, company_id, f"BK-{tag}-3", "Bakery Boss", department=dept)
+    for emp, status in ((member, "pending"), (member, "approved"), (other, "pending"), (boss, "pending")):
+        db.add(LeaveRequest(company_id=company_id, employee_id=emp.id, leave_type="Annual Leave",
+                            start_date="2031-05-04", end_date="2031-05-06", days=3, status=status))
+    db.commit()
+
+    role = _create_role(client, auth_headers, f"Bakery Lead {tag}", [dept])
+    _grant_portal_access(client, auth_headers, boss.id, f"bakery.boss.{tag}", role["id"])
+    rows = client.get("/api/v1/ess/team/leave-requests", headers=_login(client, f"bakery.boss.{tag}")).json()
+    assert [(r["employee_name"], r["days"]) for r in rows] == [("Bakery Member", 3)]
+
+    plain = _create_role(client, auth_headers, f"Plain {tag}", [])
+    _grant_portal_access(client, auth_headers, member.id, f"bakery.member.{tag}", plain["id"])
+    assert client.get("/api/v1/ess/team/leave-requests", headers=_login(client, f"bakery.member.{tag}")).json() == []

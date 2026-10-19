@@ -19509,6 +19509,7 @@ async function loadLeaveRequests(){
     const r=await _fetchLeaveRequestsList();
     _leaveRequestsCache=r.ok?await r.json():[];
     renderLeaveTable();
+    _updateLeaveRequestsBadge();
     scheduleIdleTask(updateLeaveBalance,100);
   }catch(e){
     if(tbody)tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px">Failed to load leave requests.</td></tr>';
@@ -19544,6 +19545,17 @@ function showLeaveClash(id){
       </tr></thead><tbody>${body}</tbody></table>`,
     okText:'Close',cancelText:'',tone:'primary',
   });
+}
+
+// HRMS top bar "Leave Requests" icon: how many requests are waiting (the list is already
+// limited to the user's branch and, for a department manager, their departments).
+function _updateLeaveRequestsBadge(){
+  const badge=document.getElementById('hrms-msg-badge');
+  if(!badge)return;
+  const n=(_leaveRequestsCache||[]).filter(r=>r.status==='pending').length;
+  badge.textContent=n>99?'99+':String(n);
+  badge.style.display=n?'':'none';
+  badge.parentElement?.setAttribute('title',n?`Leave Requests: ${n} waiting for approval`:'Leave Requests');
 }
 
 function renderLeaveTable(){
@@ -22774,6 +22786,34 @@ function filteredRotaStaff(scope='week'){
   });
 }
 
+// Leave requests (HRMS Leave, GET /leave/requests) by "employee number|YYYY-MM-DD": approved
+// leave wins over a pending request on the same day. Rebuilt when the list is reloaded.
+let _rotaLeaveSrc=null,_rotaLeaveByDay=new Map(),_rotaLeavesFetched=false;
+function _rotaLeaveMap(){
+  if(_rotaLeaveSrc===_leaveRequestsCache)return _rotaLeaveByDay;
+  const map=new Map();
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  for(const r of _leaveRequestsCache||[]){
+    if((r.status!=='approved'&&r.status!=='pending')||!r.employee_no||!r.start_date)continue;
+    const d=new Date(`${String(r.start_date).slice(0,10)}T00:00:00`),end=new Date(`${String(r.end_date||r.start_date).slice(0,10)}T00:00:00`);
+    for(let n=0;d<=end&&n<370;n++){
+      const key=`${r.employee_no}|${iso(d)}`,cur=map.get(key);
+      if(!cur||cur.status!=='approved')map.set(key,{status:r.status,type:r.leave_type||'Leave'});
+      d.setDate(d.getDate()+1);
+    }
+  }
+  _rotaLeaveSrc=_leaveRequestsCache;_rotaLeaveByDay=map;
+  return map;
+}
+// The Rota needs the leave list even when the Leave screen hasn't been opened yet.
+function _ensureRotaLeaves(){
+  if(_rotaLeavesFetched||(_leaveRequestsCache&&_leaveRequestsCache.length))return;
+  _rotaLeavesFetched=true;
+  _fetchLeaveRequestsList().then(r=>r.ok?r.json():null).then(list=>{
+    if(Array.isArray(list)&&list.length){_leaveRequestsCache=list;renderRotaBoards();}
+  }).catch(()=>{});
+}
+
 function assignmentFor(staff,date,day){
   const existing=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
   // A Holiday Calendar day the employee isn't working shows as that holiday (dark blue).
@@ -22783,8 +22823,16 @@ function assignmentFor(staff,date,day){
       department:staff.department,location:staff.location,date,day,type:'Holiday',code:'PH',start:'',end:'',mark:'Holiday',
       className:'holiday',holiday_name:holiday};
   }
-  if(existing)return existing;
-  return normalizeRotaAssignment({
+  // Approved leave shows as Leave (with its type); a pending request keeps the shift and
+  // is tagged "Leave requested".
+  const leave=_rotaLeaveMap().get(`${staff.id}|${date}`);
+  if(leave&&leave.status==='approved'){
+    return {...(existing||{}),id:rotaAssignmentId(staff.id,date),employee_id:staff.id,employee_name:staff.name,role:staff.role,
+      department:staff.department,location:staff.location,date,day,type:'Leave',code:'L',start:'',end:'',mark:'Leave',
+      className:'leave',leave_type:leave.type};
+  }
+  if(existing)return leave?{...existing,leave_pending:leave.type}:existing;
+  const base=normalizeRotaAssignment({
     id:rotaAssignmentId(staff.id,date),
     employee_id:staff.id,
     employee_name:staff.name,
@@ -22800,6 +22848,7 @@ function assignmentFor(staff,date,day){
     mark:'Off',
     className:'off'
   });
+  return leave?{...base,leave_pending:leave.type}:base;
 }
 
 // If a company's own roster is somehow bigger than ROTA_STAFF_DISPLAY_CAP,
@@ -23002,10 +23051,11 @@ function _updateRotaWeekControls(){
 
 function _rotaCellLabel(assignment){
   const code=String(assignment?.code||'OFF').toUpperCase();
-  if(code==='OFF')return 'Day off';
-  if(code==='L'||assignment?.mark==='Leave')return 'Leave';
+  const pending=assignment?.leave_pending?` (${assignment.leave_pending} requested)`:'';
+  if(code==='OFF')return 'Day off'+pending;
+  if(code==='L'||assignment?.mark==='Leave')return assignment?.leave_type?`Leave: ${assignment.leave_type}`:'Leave';
   if(code==='PH'||assignment?.mark==='Holiday')return 'Public holiday';
-  return `${assignment.start||''}–${assignment.end||''} ${code}`;
+  return `${assignment.start||''}–${assignment.end||''} ${code}${pending}`;
 }
 
 // One day in the Staff Schedule: shift time and a status pill, or a muted day-off box.
@@ -23016,12 +23066,13 @@ function rotaWeekCellHtml(assignment,{tinted=false}={}){
   const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
   const taskRow=tasks.length?`<span class="rs-tasks-badge" title="${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${tasks.slice(0,3).map(t=>`<i style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></i>`).join('')}${tasks.length} task${tasks.length>1?'s':''}</span>`:'';
   const tint=tinted?' rs-tinted':'';
+  const pending=assignment?.leave_pending?`<span class="rs-leave-pending" title="${escapeHtml(assignment.leave_pending)} requested, not yet approved">Leave requested</span>`:'';
   if(code==='OFF'){
     const offIcon=tinted?'<path d="M3 18v-7M3 14h18v4M21 18v-3a3 3 0 0 0-3-3h-7v2"/><circle cx="7" cy="11" r="1.6"/>':'<path d="M12 12v9M4 12a8 8 0 0 1 16 0zM12 4v-1"/>';
-    return `<span class="rs-cell rs-cell-off${tint}"><span class="rs-off-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">${offIcon}</svg>OFF</span><small>Day off</small>${taskRow}</span>`;
+    return `<span class="rs-cell rs-cell-off${tint}"><span class="rs-off-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">${offIcon}</svg>OFF</span><small>Day off</small>${pending}${taskRow}</span>`;
   }
   if(code==='L'||mark==='Leave'){
-    return `<span class="rs-cell rs-cell-leave${tint}"><span class="rs-leave-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Leave</span><small>Full day</small>${taskRow}</span>`;
+    return `<span class="rs-cell rs-cell-leave${tint}"><span class="rs-leave-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Leave</span><small>${escapeHtml(assignment?.leave_type||'Full day')}</small>${taskRow}</span>`;
   }
   let pill='Working',tone='green';
   if(code==='PH'||mark==='Holiday'){pill=assignment?.holiday_name?escapeHtml(assignment.holiday_name):'Holiday';tone='navy';}
@@ -23031,7 +23082,7 @@ function rotaWeekCellHtml(assignment,{tinted=false}={}){
   if(assignment?.className==='draft'&&tone==='green'){pill='Draft';tone='gray';}
   const clock=tinted?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>':'';
   const time=assignment?.start&&assignment?.end&&code!=='PH'?`<span class="rs-time">${clock}${escapeHtml(assignment.start)} – ${escapeHtml(assignment.end)}</span>`:'';
-  return `<span class="rs-cell rs-cell-${tone}${tint}">${time}<span class="rs-pill rs-pill-${tone}">${pill}</span>${taskRow}</span>`;
+  return `<span class="rs-cell rs-cell-${tone}${tint}">${time}<span class="rs-pill rs-pill-${tone}">${pill}</span>${pending}${taskRow}</span>`;
 }
 
 // Quick Actions > Assign Shift: opens the shift editor for the selected person on today's
@@ -23091,6 +23142,22 @@ function selectedWeekAssignments(scope='week'){
   return [...rotaAssignmentsById.values()].filter(item=>ids.has(item.employee_id)&&dates.has(item.date));
 }
 
+// The week as the board shows it, for summaries and coverage only: approved leave shown as
+// Leave on its days (copies -- never saved; Publish works on selectedWeekAssignments(), the
+// saved shifts, so a later-cancelled leave can't have overwritten anyone's shift).
+function selectedWeekView(scope='week'){
+  const start=scope==='dept'?(document.getElementById('rota-dept-week-start')?.value||weekStartValue()):weekStartValue();
+  const leaves=_rotaLeaveMap(),out=[];
+  filteredRotaStaff(scope).forEach(staff=>ROTA_WEEK_DAYS.forEach((day,i)=>{
+    const date=weekDateFromStart(start,i);
+    const saved=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
+    const leave=leaves.get(`${staff.id}|${date}`);
+    if(leave&&leave.status==='approved')out.push(assignmentFor(staff,date,day));
+    else if(saved)out.push(saved);
+  }));
+  return out;
+}
+
 // Rota hours as a duration: 184 -> "184 hrs", 7.5 -> "7h 30m", 0 -> "0 hrs".
 function rotaHoursLabel(hours){
   const mins=Math.round((Number(hours)||0)*60);
@@ -23099,7 +23166,7 @@ function rotaHoursLabel(hours){
 }
 function renderRotaSummary(){
   const weeklyBody=document.getElementById('rota-weekly-summary-tbody');
-  const weekly=selectedWeekAssignments('week');
+  const weekly=selectedWeekView('week');
   const staffCount=new Set(weekly.map(item=>item.employee_id)).size||filteredRotaStaff('week').length;
   const scheduled=weekly.reduce((sum,item)=>sum+rotaHours(item),0);
   const ot=weekly.filter(item=>item.code==='OT').length;
@@ -23373,7 +23440,7 @@ function renderDepartmentRota(){
   const staffBody=document.getElementById('rota-dept-staff-tbody');
   const department=document.getElementById('rota-dept-department')?.value||'All Departments';
   setText('rota-dept-sub',department);
-  const assignments=selectedWeekAssignments('dept');
+  const assignments=selectedWeekView('dept');
   const counts={M:0,E:0,N:0,OT:0};
   assignments.forEach(item=>{if(counts[item.code]!==undefined)counts[item.code]+=1;});
   // Shared with the "Coverage Ready" check below — previously that check
@@ -23471,6 +23538,7 @@ function _loadVisibleRotaRanges(){
 }
 
 function renderRotaBoards(){
+  _ensureRotaLeaves();
   _updateRotaWeekControls();
   renderWeeklyRotaBoard();
   renderRotaEmployeeTasksPanel();

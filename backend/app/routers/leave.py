@@ -469,6 +469,9 @@ class LeaveRequestOut(BaseModel):
     # The employee's department: the HRMS list flags a pending request that overlaps
     # approved leave of someone in the same department.
     department: str | None = None
+    # The employee's number (Employee.employee_no): the Rota shows approved leave on the
+    # employee's days, and identifies employees by their number.
+    employee_no: str | None = None
 
 
 def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
@@ -481,6 +484,7 @@ def _out(r: LeaveRequest, emp: Employee) -> LeaveRequestOut:
         cancelled_by=r.cancelled_by, cancel_reason=r.cancel_reason,
         attachment_name=r.attachment_name,
         department=emp.department if emp else None,
+        employee_no=emp.employee_no if emp else None,
     )
 
 
@@ -872,7 +876,14 @@ def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type
         settings = _leave_settings(db, company_id)
         prof = profiles.get(employee_no) or {}
         on = on or date.today()
-        earned = accrued_days(settings, yearly, prof.get("join_date"), on)
+        # Leave in a later leave year (booked in advance) may use that year's whole
+        # entitlement -- what will have been earned by the end of that year -- rather than
+        # only the days earned by its start date (a January holiday booked in December).
+        until = on
+        window = leave_year_window(settings, prof.get("join_date"), on)
+        if window[0] > leave_year_window(settings, prof.get("join_date"), date.today())[0]:
+            until = window[1] - timedelta(days=1)
+        earned = accrued_days(settings, yearly, prof.get("join_date"), until)
         if prof.get("carry"):
             window = leave_year_window(settings, prof.get("join_date"), on)
             emp = db.query(Employee.id).filter(Employee.company_id == company_id, Employee.employee_no == employee_no).first()

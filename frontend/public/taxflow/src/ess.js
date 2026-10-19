@@ -815,8 +815,25 @@
   // Topbar notification bell -- a real-data digest of what's actually
   // waiting on the employee (pending leave, open tasks) plus the most
   // recent announcements, not a fabricated count.
+  // A supervisor (role scoped to departments) also hears about leave their team asks for
+  // (GET /ess/team/leave-requests; empty for everyone else). Refreshed at most once a minute.
+  var _essTeamLeaveReqs = [], _essTeamLeaveAt = 0;
+  function _loadTeamLeaveRequests() {
+    if (Date.now() - _essTeamLeaveAt < 60000) return;
+    _essTeamLeaveAt = Date.now();
+    fetch(apiBase() + '/ess/team/leave-requests', {headers: essHeaders()})
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(rows) { _essTeamLeaveReqs = Array.isArray(rows) ? rows : []; refreshNotifications(); })
+      .catch(function() {});
+  }
+
   function refreshNotifications() {
+    _loadTeamLeaveRequests();
     var items = [];
+    _essTeamLeaveReqs.forEach(function(q) {
+      items.push({title: q.employee_name + ' applied for ' + q.leave_type,
+        sub: q.start_date + (q.end_date && q.end_date !== q.start_date ? ' → ' + q.end_date : '') + ' · ' + q.days + ' day' + (q.days === 1 ? '' : 's') + ' · awaiting approval in HRMS', tab: null});
+    });
     essUnseenDecisions().forEach(function(q) {
       items.push({title: 'Your ' + (REQ_KIND[q.kind] || {label: 'request'}).label.toLowerCase() + ' request was ' + q.status, sub: _reqTitle(q), tab: 'requests'});
     });

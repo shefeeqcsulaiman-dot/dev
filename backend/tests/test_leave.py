@@ -160,3 +160,5 @@ def test_leave_request_list_carries_department(client, db, auth_headers):
     req = _seed_leave_request(db, cid, b.id, "Annual Leave", "2031-03-04", "2031-03-06", 3)
     rows = {r["id"]: r for r in client.get("/api/v1/leave/requests", headers=auth_headers).json()}
     assert rows[req.id]["department"] == f"Stores {tag}"
+    # The Rota marks approved leave on the employee's days; it knows employees by number.
+    assert rows[req.id]["employee_no"] == f"LV-D-{tag}-B"
