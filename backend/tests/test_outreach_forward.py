@@ -1,5 +1,5 @@
-"""Trial requests (/auth/trial-request) are copied to the outreach dashboard
-(app/outreach_forward.py) once INTAKE_SECRET is set; sign-ups are not, and a
+"""Trial requests and self-service sign-ups are copied to the outreach dashboard
+(app/outreach_forward.py) once INTAKE_SECRET is set - never with the password, and a
 failing dashboard never breaks the request."""
 import uuid
 
@@ -38,12 +38,17 @@ def test_trial_request_is_copied_to_the_dashboard(client, sent):
                             "notes": "Call me", "kind": "trial", "page": "app.etaxflow.com trial request"}
 
 
-def test_signup_is_not_copied(client, sent):
+def test_signup_is_copied_without_the_password(client, sent):
+    email = f"trial-{uuid.uuid4().hex[:8]}@example.com"
     r = client.post("/api/v1/auth/register", json={
-        "email": f"trial-{uuid.uuid4().hex[:8]}@example.com", "password": "Trial-pass-1",
-        "full_name": "Trial Owner", "company_name": "Trial Co"})
+        "email": email, "password": "Trial-pass-1", "full_name": "Trial Owner", "company_name": "Trial Co",
+        "country": "United Arab Emirates", "employee_count": "1–10"})
     assert r.status_code == 201, r.text
-    assert sent == []
+    assert len(sent) == 1
+    body = sent[0]["json"]
+    assert body["email"] == email and body["kind"] == "trial" and body["page"] == "app.etaxflow.com/signup"
+    assert body["plan"] == "3-day trial account" and body["country"] == "United Arab Emirates"
+    assert "password" not in body and "Trial-pass-1" not in str(body)
 
 
 def test_nothing_is_sent_without_the_secret(client, monkeypatch):

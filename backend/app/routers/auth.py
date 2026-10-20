@@ -63,7 +63,8 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
 @router.post("/register", response_model=Token, status_code=201)
 @limiter.limit("30/hour")
-def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> Token:
+def register(request: Request, payload: RegisterRequest, background: BackgroundTasks,
+             db: Session = Depends(get_db)) -> Token:
     if db.query(User).filter(User.email == payload.email.lower()).first():
         raise HTTPException(status_code=409, detail="Registration failed")
     trial_expires = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
@@ -109,6 +110,11 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
     ))
     db.commit()
     db.refresh(user)
+    background.add_task(forward_trial, {
+        "full_name": payload.full_name, "company_name": payload.company_name, "email": payload.email.lower(),
+        "phone": payload.phone, "employee_count": payload.employee_count, "country": payload.country,
+        "plan": "3-day trial account", "notes": payload.notes,
+    }, "app.etaxflow.com/signup")
     return Token(access_token=create_access_token(user.id))
 
 

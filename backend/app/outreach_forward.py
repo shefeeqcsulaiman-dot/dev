@@ -1,10 +1,11 @@
-"""Copies each trial request (POST /auth/trial-request) to the outreach dashboard
+"""Copies each trial request and self-service sign-up (/auth/trial-request, /auth/register)
+to the outreach dashboard
 (https://outreach.etaxflow.com, Website Requests page), so the sales team sees it there too.
 
 Off unless INTAKE_SECRET is set (the same value as on the dashboard, which uses it to
 trust this server's requests). Runs after the response as a FastAPI background task:
 a slow or failing dashboard never delays or breaks the request; failures are only logged.
-Self-service sign-ups (/auth/register) are not copied.
+Never sends the password.
 """
 import logging
 
