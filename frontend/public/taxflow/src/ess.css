@@ -941,6 +941,7 @@
   .m-att-clock{font-size:34px;font-weight:700;color:var(--text);margin:2px 0 14px;font-variant-numeric:tabular-nums}
   .m-att-btn{width:150px;height:150px;border-radius:50%;border:10px solid var(--accent-bg);background:var(--accent);background-clip:padding-box;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:15px;font-weight:700;margin:0 auto}
   .m-att-btn.out{background:#dc2626;border-color:rgba(220,38,38,.18)}
+  .m-att-btn[hidden],.m-shift-btn[hidden]{display:none!important}
   .m-att-btn:disabled{opacity:.7}
   .m-att-btn:active,.m-shift-btn:active{transform:scale(.97)}
   .m-att-note{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;font-size:12px;color:var(--text2)}

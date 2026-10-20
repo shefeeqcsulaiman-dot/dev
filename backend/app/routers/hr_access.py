@@ -41,6 +41,8 @@ from app.dependencies import assert_company_active, company_allows_module, requi
 from app.module_catalog import ALL_MODULES
 from app.limiter import limiter
 from app.models import (
+    AppDataRecord,
+    AttendanceDetail,
     AttendanceSession,
     Branch,
     Company,
@@ -375,6 +377,67 @@ def _nearest_assigned_location(
     return best
 
 
+# HR > GPS Attendance > Check-in method: "both" (default) or "biometric" (no phone check-in).
+_ATTENDANCE_METHOD_KEY = "attendance-method-config"
+ATTENDANCE_METHODS = ("both", "biometric")
+
+
+def attendance_method(db: Session, company_id: str) -> str:
+    row = db.query(AppDataRecord.payload).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == _ATTENDANCE_METHOD_KEY).first()
+    try:
+        mode = str((json.loads(row[0]) if row else {}).get("mode") or "both").lower()
+    except (TypeError, ValueError, AttributeError):
+        mode = "both"
+    return mode if mode in ATTENDANCE_METHODS else "both"
+
+
+def _open_day_punch(db: Session, emp: Employee) -> dict | None:
+    """Today's attendance (any source: biometric device, GPS, import) when its last session
+    is still open: {"at": first in of that session, "source": "device" | "gps" | ...}."""
+    from app.attendance_store import _company_offset, _local_date, _pair_day_punches
+
+    now = datetime.now(UTC)
+    work_date = _local_date(now, _company_offset(db, emp.company_id))
+    row = db.query(AttendanceDetail.raw_events).filter(
+        AttendanceDetail.company_id == emp.company_id, AttendanceDetail.employee_id == emp.employee_no,
+        AttendanceDetail.work_date == work_date).first()
+    try:
+        events = json.loads(row[0] or "[]") if row else []
+    except (TypeError, ValueError):
+        return None
+    parsed = sorted(((datetime.fromisoformat(e["punch_time"]), e.get("direction") or "in", e.get("source") or "device")
+                     for e in events if e.get("punch_time")), key=lambda t: t[0])
+    if not parsed:
+        return None
+    pairs = _pair_day_punches([(ts, d) for ts, d, _src in parsed])
+    if not pairs or pairs[-1][1] is not None:
+        return None
+    opened = pairs[-1][0]
+    source = next((src for ts, _d, src in parsed if ts == opened), "device")
+    return {"at": opened if opened.tzinfo else opened.replace(tzinfo=UTC), "source": source}
+
+
+def own_check_status(db: Session, emp: Employee) -> dict:
+    """The employee's own "am I checked in" for ESS, from a GPS session or the day's punches
+    from any source -- a device check-in used to leave ESS showing "Check in"."""
+    open_session = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
+        .first()
+    )
+    day = None if open_session else _open_day_punch(db, emp)
+    at = open_session.check_in if open_session else (day["at"] if day else None)
+    return {
+        "checked_in": bool(open_session or day),
+        "check_in_time": str(at) if at else None,
+        "check_in_at": _iso_utc(at) if at else None,
+        "check_in_source": "gps" if open_session else ("device" if day and day["source"] != "gps" else ("gps" if day else None)),
+        "gps_enabled": attendance_method(db, emp.company_id) != "biometric",
+    }
+
+
 def _record_gps_punch(db: Session, emp: Employee, when: datetime, direction: str, location_name: str | None) -> None:
     """Writes a GPS check-in/out into the same attendance records biometric punches use, so it
     shows in Today's Attendance, the monthly and late reports, payroll overtime and ESS history.
@@ -522,9 +585,11 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
     role = db.get(Role, emp.role_id) if emp.role_id else None
     role_name = role.role_name if role else "Employee"
     company_id = emp.company_id
+    mine = own_check_status(db, emp)
 
     if role_name in ("Administrator", "HR Manager"):
         return {
+            **mine,
             "role": role_name,
             "total_employees": scope_employee_query_by_names(
                 db.query(Employee).filter(Employee.company_id == company_id), employee_scope(db, emp),
@@ -556,6 +621,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
                 (i.net_pay for i in db.query(PayrollItem).filter(PayrollItem.run_id == latest.id, PayrollItem.employee_id.in_(in_scope)).all()), 0,
             ))
         return {
+            **mine,
             "role": role_name,
             "latest_run_period": latest.period if latest else None,
             "latest_run_status": latest.status if latest else None,
@@ -563,6 +629,7 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
         }
     if role_name == "Manager":
         return {
+            **mine,
             "role": role_name,
             "team_active_sessions": _scope_attendance_to_branch(
                 db.query(AttendanceSession).filter(
@@ -573,11 +640,6 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
         }
 
     # Employee dashboard — own status only
-    open_session = (
-        db.query(AttendanceSession)
-        .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
-        .first()
-    )
     # Sessions since company-local midnight, for the ESS mobile In/Out/Hours tiles
     country = db.query(Company.country).filter(Company.id == company_id).scalar()
     offset = timezone_utils.company_utc_offset(country)
@@ -590,10 +652,8 @@ def hr_dashboard(db: Session = Depends(get_db), emp: Employee = Depends(get_curr
         .all()
     )
     return {
+        **mine,
         "role": role_name,
-        "checked_in": bool(open_session),
-        "check_in_time": str(open_session.check_in) if open_session else None,
-        "check_in_at": _iso_utc(open_session.check_in) if open_session else None,
         "today_sessions": [
             {"check_in": _iso_utc(s.check_in), "check_out": _iso_utc(s.check_out) if s.check_out else None}
             for s in today_sessions
@@ -1136,6 +1196,41 @@ def _location_out(loc: CompanyLocation) -> CompanyLocationOut:
     )
 
 
+class AttendanceMethodIn(BaseModel):
+    mode: str
+
+    @field_validator("mode")
+    @classmethod
+    def _mode(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ATTENDANCE_METHODS:
+            raise ValueError("mode must be both or biometric")
+        return v
+
+
+@gated_router.get("/attendance-method")
+def get_attendance_method(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> dict:
+    return {"mode": attendance_method(db, principal.company_id)}
+
+
+@gated_router.put("/attendance-method")
+def set_attendance_method(
+    payload: AttendanceMethodIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr:manage_locations")),
+) -> dict:
+    row = db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == principal.company_id, AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == _ATTENDANCE_METHOD_KEY).first()
+    data = json.dumps({"id": _ATTENDANCE_METHOD_KEY, "mode": payload.mode})
+    if row:
+        row.payload = data
+    else:
+        db.add(AppDataRecord(company_id=principal.company_id, collection="hr_settings", record_key=_ATTENDANCE_METHOD_KEY, payload=data))
+    db.commit()
+    return {"mode": payload.mode}
+
+
 @gated_router.get("/company-locations", response_model=list[CompanyLocationOut])
 def list_company_locations(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[CompanyLocationOut]:
     query = db.query(CompanyLocation).filter(CompanyLocation.company_id == principal.company_id)
@@ -1332,11 +1427,19 @@ def check_in(
     db: Session = Depends(get_db),
     emp: Employee = Depends(get_current_employee),
 ) -> CheckInOut:
+    if attendance_method(db, emp.company_id) == "biometric":
+        raise HTTPException(status_code=403, detail="Your company records attendance on the biometric device only, so phone check-in is off.")
     existing = (
         db.query(AttendanceSession)
         .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
         .first()
     )
+    if not existing:
+        day = _open_day_punch(db, emp)
+        if day and day["source"] != "gps":
+            local = day["at"] + timezone_utils.company_utc_offset(db.query(Company.country).filter(Company.id == emp.company_id).scalar())
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail=f"You are already checked in on the attendance device (since {local.strftime('%H:%M')}).")
     if existing:
         started = existing.check_in if existing.check_in.tzinfo else existing.check_in.replace(tzinfo=UTC)
         if datetime.now(UTC) - started < timedelta(hours=_FORGOTTEN_CHECKOUT_HOURS):
@@ -1412,6 +1515,15 @@ def check_out(
         .first()
     )
     if not session:
+        # Checked in on the biometric device: the phone may end the day (a GPS check-out).
+        if _open_day_punch(db, emp):
+            now = datetime.now(UTC)
+            where = None
+            if payload:
+                nearest = _nearest_assigned_location(db, emp.id, payload.latitude, payload.longitude)
+                where = nearest[0].location_name if nearest else None
+            _record_gps_punch(db, emp, now, "out", where)
+            return {"ok": True, "session_id": None, "check_out": str(now), "source": "device"}
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not checked in")
     now = datetime.now(UTC)
     session.check_out = now

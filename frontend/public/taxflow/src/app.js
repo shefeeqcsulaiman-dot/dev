@@ -2629,7 +2629,24 @@ function renderHrAccessPanel(){
 
 let HR_LOCATIONS_CACHE=[];
 
+// HRMS > GPS Attendance > Check-in method (GET/PUT /hr/attendance-method).
+async function loadAttendanceMethod(){
+  const sel=document.getElementById('hr-att-method');
+  if(!sel)return;
+  try{const r=await fetch(`${apiBaseUrl()}/hr/attendance-method`,{headers:hrAccessHeaders()});if(r.ok)sel.value=(await r.json()).mode||'both';}catch(e){}
+}
+async function saveAttendanceMethod(sel){
+  const mode=sel.value;
+  if(mode==='biometric'&&!(await appConfirm({title:'Biometric device only',message:'Employees will no longer be able to check in from their phone (ESS). Anyone already checked in can still check out. Use this when everyone checks in on the attendance device.',okText:'Turn off phone check-in'}))){sel.value='both';return;}
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/attendance-method`,{method:'PUT',headers:hrAccessHeaders(),body:JSON.stringify({mode})});
+    if(!r.ok)throw new Error();
+    toast(mode==='biometric'?'Phone check-in turned off':'Device and phone check-in both on','ok');
+  }catch(e){toast('Could not save the check-in method','err');loadAttendanceMethod();}
+}
+
 async function loadCompanyLocations(){
+  loadAttendanceMethod();
   const tbody=document.getElementById('hr-loc-tbody');
   if(!tbody)return;
   try{
@@ -22935,6 +22952,21 @@ function _rotaIsDayOff(existing,staffId,date){
   }
   return false;
 }
+// .tbl.m-cards tables become cards on phones (styles.css); each cell is labelled with its
+// column's heading, re-done whenever rows are drawn.
+function _labelCardTables(){
+  document.querySelectorAll('table.m-cards').forEach(t=>{
+    const heads=[...t.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+    t.querySelectorAll('tbody tr').forEach(tr=>[...tr.children].forEach((td,i)=>{if(!td.hasAttribute('data-label')&&heads[i])td.setAttribute('data-label',heads[i]);}));
+  });
+}
+{
+  let pending=false;
+  const run=()=>{pending=false;_labelCardTables();};
+  const start=()=>new MutationObserver(()=>{if(!pending&&document.querySelector('table.m-cards')){pending=true;setTimeout(run,30);}})
+    .observe(document.body,{childList:true,subtree:true});
+  if(document.body)start();else document.addEventListener('DOMContentLoaded',start);
+}
 function assignmentFor(staff,date,day){
   const existing=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
   // A Holiday Calendar day the employee isn't working shows as that holiday (dark blue).
@@ -25736,7 +25768,9 @@ function _attendanceSourceBadge(source){
   const map={
     device:['Biometric','b-g'],
     biotime:['Biometric','b-g'],
+    gps:['Mobile (GPS)','b-t'],   // ESS phone check-in / check-out
     csv:['CSV Import','b-b'],
+    import:['Import','b-b'],
     correction:['Correction','b-a'],
     manual:['Manual','b-b'],
   };

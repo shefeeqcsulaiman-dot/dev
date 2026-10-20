@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=07be51f030" as="style">
-<link rel="preload" href="src/app.js?v=0cd5936a0d" as="script">
+<link rel="preload" href="src/styles.css?v=3c995fb0ee" as="style">
+<link rel="preload" href="src/app.js?v=666d60a819" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=07be51f030">
+<link rel="stylesheet" href="src/styles.css?v=3c995fb0ee">
 <style>
 /* ── HRMS Sidebar: Light Mode ─────────────────────────────── */
 body.theme-light .sb{background:#f1f4f8!important;border-right:1px solid #dde2eb!important;}
@@ -1199,6 +1199,8 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div class="card mb16">
       <div class="card-hd">
         <div><div class="card-title">GPS Attendance — Company Locations &amp; Live Tracking</div><div class="card-sub">Geofenced check-in and live employee locations</div></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text2)" title="Biometric only: employees check in on the attendance device; phone (GPS) check-in is turned off. Both: either works, and they count as one day.">Check-in method
+          <select id="hr-att-method" style="max-width:170px" onchange="saveAttendanceMethod(this)"><option value="both">Device and phone (GPS)</option><option value="biometric">Biometric device only</option></select></label>
       </div>
       <div id="hr-access-login" style="display:none"></div>
       <div id="hr-access-panel" style="display:none">
@@ -1266,7 +1268,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div><div class="card-title">Overtime Requests</div><div class="card-sub">Detected from attendance after checkout</div></div><button class="btn btn-p btn-sm" onclick="showM('m-ot')">+ Submit OT</button></div>
-        <table class="tbl" data-delete-actions-bound="skip">
+        <table class="tbl m-cards" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Worked</th><th>OT</th><th>Status</th><th></th></tr></thead>
           <tbody id="ot-tbody">
           </tbody>
@@ -1286,7 +1288,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
     <div class="g2 mb16">
       <div class="card">
         <div class="card-hd"><div class="card-title">Leave Requests</div><button class="btn btn-p" onclick="showM('m-leave')">+ Apply Leave</button></div>
-        <table class="tbl" data-delete-actions-bound="skip">
+        <table class="tbl m-cards" data-delete-actions-bound="skip">
           <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th></th></tr></thead>
           <tbody id="leave-tbody">
           </tbody>
@@ -1417,8 +1419,20 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
       .hrs-nav-item.hrs-active{background:var(--accent-glow,rgba(99,102,241,.07));color:var(--accent);border-right-color:var(--accent)}
       .hrs-section{display:none;padding:20px 24px}
       .hrs-section.hrs-visible{display:block}
+      .hrs-layout{display:flex;min-height:560px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+      .hrs-content{flex:1;overflow-y:auto;min-width:0}
+      /* Phones: the settings menu becomes a swipeable row of tabs above full-width content */
+      @media (max-width:760px){
+        .hrs-layout{flex-direction:column;min-height:0}
+        .hrs-sidebar{width:auto;display:flex;gap:6px;overflow-x:auto;padding:8px;border-right:none;border-bottom:1px solid var(--border);scrollbar-width:none;-webkit-overflow-scrolling:touch}
+        .hrs-sidebar::-webkit-scrollbar{display:none}
+        .hrs-nav-group{display:none}
+        .hrs-nav-item{flex:0 0 auto;white-space:nowrap;padding:8px 12px;border:1px solid var(--border);border-radius:99px;border-right-width:1px}
+        .hrs-nav-item.hrs-active{border-color:var(--accent)}
+        .hrs-section{padding:14px 12px}
+      }
     </style>
-    <div style="display:flex;min-height:560px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">
+    <div class="hrs-layout">
       <!-- Sidebar nav -->
       <div class="hrs-sidebar">
         <div class="hrs-nav-group">Structure</div>
@@ -1454,7 +1468,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
         </div>
       </div><!-- /hrs-sidebar -->
       <!-- Content area -->
-      <div style="flex:1;overflow-y:auto">
+      <div class="hrs-content">
         <div id="hrs-organization" class="hrs-section hrs-visible">
     <!-- Departments & Branches -->
     <div class="card mb16">
@@ -3305,7 +3319,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=0cd5936a0d" defer></script>
+<script src="src/app.js?v=666d60a819" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

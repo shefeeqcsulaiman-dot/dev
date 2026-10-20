@@ -28,6 +28,9 @@ from app import timezone_utils
 from app.models import AttendanceDetail, Company
 
 _MAX_STORED_SESSIONS = 5
+# Two scans this close together are one event scanned twice (or a GPS check-in/out and the
+# device for the same moment), see _pair_day_punches.
+_RESCAN_WINDOW = timedelta(minutes=15)
 # Anti-flood guard only -- no real employee approaches 60 genuine scans in a
 # single day; this just bounds how large one day's raw_events blob can grow.
 _MAX_RAW_EVENTS_PER_DAY = 60
@@ -44,11 +47,15 @@ def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime
     5-minute "sensor bounce" window that only collapsed rapid re-reads and
     still emitted an incomplete (in, None) pair for anything slower.)
 
-    An "out" with no open session is not returned as a pair: it cannot form
-    a session, and slotting it into clock_out_1 would blank clock_in_1 and
-    hide an overnight-shift worker (whose "in" belongs to the prior day)
-    from every "who is present" view. It is still retained verbatim in
-    raw_events and the per-event Sync Activity Log.
+    An "out" with no open session never starts a pair: slotting it into
+    clock_out_1 would blank clock_in_1 and hide an overnight-shift worker
+    (whose "in" belongs to the prior day) from every "who is present" view.
+    After a closed session it moves that session's end later instead -- the
+    last check-out of the day wins (a GPS check-out and a device scan on the
+    way out). Either way it stays in raw_events and the Sync Activity Log.
+
+    A scan with no direction ("unknown") takes the opposite of the current
+    state, unless it is within _RESCAN_WINDOW of the previous one (a re-scan).
 
     A single unclosed "in" left at day-end yields a trailing
     (clock_in, None). That is a GENUINE attendance event and
@@ -58,6 +65,16 @@ def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime
     pairs: list[tuple[datetime, datetime | None]] = []
     open_in: datetime | None = None
     for ts, direction in events:
+        if direction not in ("in", "out"):
+            # Direction not reported (some BioTime setups): the opposite of the current state,
+            # except a scan within _RESCAN_WINDOW of the previous one, which repeats it -- a
+            # device scan a few minutes after a GPS check-in must not end the session.
+            if open_in is not None:
+                direction = "in" if ts - open_in < _RESCAN_WINDOW else "out"
+            elif pairs and pairs[-1][1] is not None and ts - pairs[-1][1] < _RESCAN_WINDOW:
+                direction = "out"
+            else:
+                direction = "in"
         if direction == "in":
             if open_in is None:
                 open_in = ts
@@ -65,6 +82,10 @@ def _pair_day_punches(events: list[tuple[datetime, str]]) -> list[tuple[datetime
         elif open_in is not None:
             pairs.append((open_in, ts))
             open_in = None
+        elif pairs and pairs[-1][1] is not None and ts > pairs[-1][1]:
+            # A second check-out with nothing open (GPS check-out, then the device on the way
+            # out, or the other way round): the LAST check-out ends the day (2026-10-20).
+            pairs[-1] = (pairs[-1][0], ts)
     if open_in is not None:
         pairs.append((open_in, None))
     return pairs

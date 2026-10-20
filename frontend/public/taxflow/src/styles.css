@@ -1409,6 +1409,21 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
   .content{padding:12px;}
   /* minmax(0,1fr): a plain 1fr column can't shrink below its widest content (e.g. a wide table), which pushed pages sideways */
   .g2,.g2.g2-main-side,.g3,.g4,.fr2,.fr3,.fr4,.pricing-line{grid-template-columns:minmax(0,1fr);}
+  /* .tbl.m-cards: one card per row on phones (labels from _labelCardTables in app.js), so
+     approval lists show their status and Approve/Reject without scrolling sideways */
+  .tbl.m-cards,.tbl.m-cards tbody,.tbl.m-cards tr,.tbl.m-cards td{display:block;width:100%;min-width:0!important;}
+  .tbl.m-cards thead{display:none;}
+  .tbl.m-cards tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface);}
+  .tbl.m-cards td{padding:0!important;border:none!important;font-size:12.5px;min-width:0;overflow-wrap:anywhere;white-space:normal;}
+  .tbl.m-cards td::before{content:attr(data-label);display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:2px;}
+  .tbl.m-cards td:first-child{grid-column:1/-1;font-weight:700;font-size:13.5px;}
+  .tbl.m-cards td:last-child{grid-column:1/-1;}
+  .tbl.m-cards td:first-child::before,.tbl.m-cards td:last-child::before,.tbl.m-cards td[colspan]::before,.tbl.m-cards td[data-label=""]::before{display:none;}
+  .tbl.m-cards td:empty{display:none;}
+  .tbl.m-cards td[colspan]{grid-column:1/-1;}
+  /* A row of small summary tiles stays two across: one per row filled the first screen */
+  .g3:has(>.stat),.g4:has(>.stat){grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .g3:has(>.stat)>.stat,.g4:has(>.stat)>.stat{padding:12px;}
   .dash-hero{padding:16px;}
   .dash-hero-title{font-size:30px;}
   .dash-hero-side{grid-template-columns:1fr;}

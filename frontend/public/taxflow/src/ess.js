@@ -226,11 +226,18 @@
       var r = await fetch(apiBase() + '/hr/dashboard', {headers: essHeaders()});
       if (r.status === 401) { essLogout(); return; }
       var d = await r.json();
-      if (d.checked_in) {
-        gpsSetStatus('Checked in since ' + (d.check_in_time ? d.check_in_time.substring(0,16).replace('T',' ') : '—') + '.');
+      if (d.gps_enabled === false && !d.checked_in) {
+        gpsSetStatus('Your company records attendance on the biometric device. Phone check-in is off.');
+        document.getElementById('gps-checkin-btn').style.display = 'none';
+        document.getElementById('gps-checkout-btn').style.display = 'none';
+        stopGpsPingLoop();
+      } else if (d.checked_in) {
+        var since = d.check_in_at ? new Date(d.check_in_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—';
+        gpsSetStatus('Checked in at ' + since + (d.check_in_source === 'device' ? ' on the attendance device' : '') + '.');
         document.getElementById('gps-checkin-btn').style.display = 'none';
         document.getElementById('gps-checkout-btn').style.display = 'inline-block';
-        startGpsPingLoop();
+        // Location updates belong to a phone check-in; a device check-in has none to track.
+        if (d.check_in_source === 'gps') startGpsPingLoop(); else stopGpsPingLoop();
       } else {
         gpsSetStatus('Not checked in.');
         document.getElementById('gps-checkin-btn').style.display = 'inline-block';
@@ -595,6 +602,14 @@
     });
   }
 
+  // A punch's source in words (same labels as HRMS Today's Attendance).
+  function essSourceLabel(source) {
+    return String(source || '').split(/\s*[,/+]\s*/).filter(Boolean).map(function(s) {
+      return {device: 'Biometric device', biotime: 'Biometric device', gps: 'Mobile (GPS)', csv: 'Import', 'import': 'Import',
+              correction: 'Correction', manual: 'Manual'}[s.toLowerCase()] || s;
+    }).filter(function(v, i, a) { return a.indexOf(v) === i; }).join(' + ') || '—';
+  }
+
   function renderAttendance() {
     var rows = _essData.attendance || [];
     var body = document.getElementById('att-body');
@@ -639,7 +654,7 @@
           : '<span class="att-pill miss">No check-out</span> <button class="link-btn" style="margin:0 0 0 6px" data-date="' + escHtml(d.date) + '" data-in="' + escHtml(String(d.first.punch_time).substring(11, 16)) + '" onclick="essOpenRequestModal(\'correction\',{date:this.dataset.date,checkin:this.dataset.in})">Request fix</button>';
       }
       return '<tr><td>' + fmtShortDate(d.date) + '</td><td><span class="dir-in">' + String(d.first.punch_time).substring(11, 16) + '</span></td><td>' + out +
-        '</td><td>' + (d.mins != null ? _fmtDur(d.mins) : '—') + '</td><td>' + d.count + '</td><td>' + escHtml(d.source) + '</td></tr>';
+        '</td><td>' + (d.mins != null ? _fmtDur(d.mins) : '—') + '</td><td>' + d.count + '</td><td>' + escHtml(essSourceLabel(d.source)) + '</td></tr>';
     }).join('');
   }
 
@@ -672,9 +687,9 @@
     }
     var inT = String(d.first.punch_time).substring(11, 16);
     if (d.last) {
-      el.innerHTML = '<div class="att-today-status">Checked out ' + String(d.last.punch_time).substring(11, 16) + '</div><div class="att-today-sub">In at ' + inT + ' · worked <b>' + _fmtDur(d.mins) + '</b> · ' + d.count + ' punches via ' + escHtml(d.source) + '</div>';
+      el.innerHTML = '<div class="att-today-status">Checked out ' + String(d.last.punch_time).substring(11, 16) + '</div><div class="att-today-sub">In at ' + inT + ' · worked <b>' + _fmtDur(d.mins) + '</b> · ' + d.count + ' punches via ' + escHtml(essSourceLabel(d.source)) + '</div>';
     } else {
-      el.innerHTML = '<div class="att-today-status">Checked in ' + inT + '</div><div class="att-today-sub"><span class="att-pill live">On shift</span> &nbsp;' + d.count + ' punch' + (d.count === 1 ? '' : 'es') + ' today via ' + escHtml(d.source) + '</div>';
+      el.innerHTML = '<div class="att-today-status">Checked in ' + inT + '</div><div class="att-today-sub"><span class="att-pill live">On shift</span> &nbsp;' + d.count + ' punch' + (d.count === 1 ? '' : 'es') + ' today via ' + escHtml(essSourceLabel(d.source)) + '</div>';
     }
   }
 
@@ -2985,7 +3000,14 @@
     var btn = document.getElementById('m-att-btn');
     if (btn) btn.classList.toggle('out', checked);
     var since = _essCheck && _essCheck.check_in_at ? _mLocalHHMM(_essCheck.check_in_at) : '';
-    _mSet('m-shift-state', checked ? 'Checked in' + (since ? ' at ' + since : '') : 'Not checked in yet');
+    var device = checked && _essCheck.check_in_source === 'device';
+    var gpsOff = !!(_essCheck && _essCheck.gps_enabled === false);
+    _mSet('m-shift-state', checked ? 'Checked in' + (since ? ' at ' + since : '') + (device ? ' (device)' : '')
+      : (gpsOff ? 'Check in on the attendance device' : 'Not checked in yet'));
+    // Biometric-only company: no phone check-in (check-out still allowed if already in).
+    [document.getElementById('m-shift-btn'), document.getElementById('m-att-btn')].forEach(function(b) { if (b) b.hidden = gpsOff && !checked; });
+    var note = document.querySelector('#m-att-note span');
+    if (note) note.textContent = gpsOff && !checked ? 'Your company records attendance on the biometric device.' : 'Your location is checked when you tap';
   }
 
   async function _mLoadToday() {
