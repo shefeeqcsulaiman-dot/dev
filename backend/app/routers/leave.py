@@ -386,12 +386,21 @@ def leave_basis(db: Session, company_id: str, employee_no: str, leave_type: str,
 
 def leave_day_breakdown(db: Session, company_id: str, employee_no: str, leave_type: str,
                         start: date, end: date) -> dict:
-    """The days a request uses, and which days it skipped and why."""
+    """The days a request uses, and which days it skipped and why. A rota day off is never
+    counted, for every leave type (the employee was not due to work); "Working" types also
+    skip the weekend and public holidays, "Calendar" types count those."""
     basis = leave_basis(db, company_id, employee_no, leave_type)
     total = (end - start).days + 1
-    if basis != "Working" or total <= 0:
-        return {"basis": basis, "days": max(0, total), "calendar_days": max(0, total), "skipped": {}}
+    if total <= 0:
+        return {"basis": basis, "days": 0, "calendar_days": 0, "skipped": {}}
     from app.rota_days import rota_day_statuses
+    if basis != "Working":
+        from app.routers.attendance import _holiday_dates
+        rota = rota_day_statuses(db, company_id, [employee_no], start, end)
+        holidays = _holiday_dates(db, company_id) if rota else set()
+        # A public holiday with no rota entry is the holiday, which Calendar types count.
+        off = sum(1 for (_eno, iso), kind in rota.items() if kind == "off" and iso not in holidays)
+        return {"basis": basis, "days": total - off, "calendar_days": total, "skipped": {"day_off": off} if off else {}}
     from app.routers.attendance import _holiday_dates, _weekend_day_set
     weekend = _weekend_day_set(db, company_id)              # JS getDay numbers, None = no weekend
     holidays = _holiday_dates(db, company_id)

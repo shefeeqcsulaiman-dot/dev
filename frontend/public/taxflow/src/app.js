@@ -22520,7 +22520,7 @@ function rotaCellHtml(assignment){
   // Start/end as two pieces so a narrow cell wraps cleanly instead of breaking after a hyphen.
   const time=start&&end?`<b>${escapeHtml(start)}</b><b>${escapeHtml(end)}</b>`:'';
   const mark=assignment?.mark||'';
-  const note=isOff?'Day off':mark==='Leave'||code==='L'?'Leave':mark==='Holiday'||code==='PH'?'Holiday':mark==='Training'||code==='TR'?'Training':mark==='OT'||className==='overtime'?'Overtime':className==='draft'?'Draft':'';
+  const note=isOff?'Day off':mark==='Leave'||code==='L'?'Leave':mark==='Holiday'||code==='PH'?'Holiday':mark==='Training'||code==='TR'?'Training':mark==='OT'||className==='overtime'?'Extra shift':className==='draft'?'Draft':'';
   const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
   const taskCount=tasks.length;
   // A visible extra line in the cell's normal flow, not a tiny corner
@@ -22582,6 +22582,7 @@ function openRotaCellEditor(cell){
   setFieldValue(document.getElementById('rota-edit-end'),end&&end!=='-'?end:'');
   setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??ROTA_EDIT_DEFAULTS[type]?.break_minutes??60));
   setSelectValue(document.getElementById('rota-edit-mark'),assignment?.mark||ROTA_EDIT_DEFAULTS[type]?.mark||'Shift');
+  {const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=document.getElementById('rota-edit-mark')?.value==='OT'?'':'none';}
   setFieldValue(document.getElementById('rota-edit-notes'),assignment?.notes||'');
   renderRotaEditTasks(assignment?.tasks||[]);
   const readOnly=!hrmsCan('rota:edit');
@@ -22922,6 +22923,18 @@ function _ensureRotaLeaves(){
   }).catch(()=>{});
 }
 
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='rota-edit-mark'){const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=e.target.value==='OT'?'':'none';}});
+function _rotaIsDayOff(existing,staffId,date){
+  if(existing)return String(existing.code||'').toUpperCase()==='OFF'||String(existing.type||'').toLowerCase()==='off';
+  const d=new Date(date+'T00:00:00');
+  const monday=new Date(d);monday.setDate(d.getDate()-((d.getDay()+6)%7));
+  for(let i=0;i<7;i++){
+    const x=new Date(monday);x.setDate(monday.getDate()+i);
+    const iso=`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+    if(iso!==date&&rotaAssignmentsById.get(rotaAssignmentId(staffId,iso)))return true;
+  }
+  return false;
+}
 function assignmentFor(staff,date,day){
   const existing=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
   // A Holiday Calendar day the employee isn't working shows as that holiday (dark blue).
@@ -22934,6 +22947,13 @@ function assignmentFor(staff,date,day){
   // Approved leave shows as Leave (with its type); a pending request keeps the shift and
   // is tagged "Leave requested".
   const leave=_rotaLeaveMap().get(`${staff.id}|${date}`);
+  // A rota day off stays a day off inside approved leave (it is not counted as a leave day):
+  // marked Off, or no entry in a week the rota is published for this person (rota_days.py).
+  if(leave&&leave.status==='approved'&&_rotaIsDayOff(existing,staff.id,date)){
+    const off=existing||normalizeRotaAssignment({id:rotaAssignmentId(staff.id,date),employee_id:staff.id,employee_name:staff.name,role:staff.role,
+      department:staff.department,location:staff.location,date,day,type:'Off',code:'OFF',start:'',end:'',mark:'Off',className:'off'});
+    return {...off,leave_day_off:leave.type};
+  }
   if(leave&&leave.status==='approved'){
     return {...(existing||{}),id:rotaAssignmentId(staff.id,date),employee_id:staff.id,employee_name:staff.name,role:staff.role,
       department:staff.department,location:staff.location,date,day,type:'Leave',code:'L',start:'',end:'',mark:'Leave',
@@ -23160,7 +23180,7 @@ function _updateRotaWeekControls(){
 function _rotaCellLabel(assignment){
   const code=String(assignment?.code||'OFF').toUpperCase();
   const pending=assignment?.leave_pending?` (${assignment.leave_pending} requested)`:'';
-  if(code==='OFF')return 'Day off'+pending;
+  if(code==='OFF')return 'Day off'+(assignment?.leave_day_off?` (during ${assignment.leave_day_off}, not counted)`:'')+pending;
   if(code==='L'||assignment?.mark==='Leave')return assignment?.leave_type?`Leave: ${assignment.leave_type}`:'Leave';
   if(code==='PH'||assignment?.mark==='Holiday')return 'Public holiday';
   return `${assignment.start||''}–${assignment.end||''} ${code}${pending}`;
@@ -23174,7 +23194,8 @@ function rotaWeekCellHtml(assignment,{tinted=false}={}){
   const tasks=Array.isArray(assignment?.tasks)?assignment.tasks:[];
   const taskRow=tasks.length?`<span class="rs-tasks-badge" title="${escapeHtml(tasks.map(t=>t.title).filter(Boolean).join(', '))}">${tasks.slice(0,3).map(t=>`<i style="background:${escapeHtml(t.color||TASK_COLORS[0])}"></i>`).join('')}${tasks.length} task${tasks.length>1?'s':''}</span>`:'';
   const tint=tinted?' rs-tinted':'';
-  const pending=assignment?.leave_pending?`<span class="rs-leave-pending" title="${escapeHtml(assignment.leave_pending)} requested, not yet approved">Leave requested</span>`:'';
+  const pending=assignment?.leave_pending?`<span class="rs-leave-pending" title="${escapeHtml(assignment.leave_pending)} requested, not yet approved">Leave requested</span>`
+    :assignment?.leave_day_off?`<span class="rs-leave-pending" title="Inside ${escapeHtml(assignment.leave_day_off)}; a rota day off is not counted as a leave day">During leave</span>`:'';
   if(code==='OFF'){
     const offIcon=tinted?'<path d="M3 18v-7M3 14h18v4M21 18v-3a3 3 0 0 0-3-3h-7v2"/><circle cx="7" cy="11" r="1.6"/>':'<path d="M12 12v9M4 12a8 8 0 0 1 16 0zM12 4v-1"/>';
     return `<span class="rs-cell rs-cell-off${tint}"><span class="rs-off-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">${offIcon}</svg>OFF</span><small>Day off</small>${pending}${taskRow}</span>`;
@@ -23185,7 +23206,7 @@ function rotaWeekCellHtml(assignment,{tinted=false}={}){
   let pill='Working',tone='green';
   if(code==='PH'||mark==='Holiday'){pill=assignment?.holiday_name?escapeHtml(assignment.holiday_name):'Holiday';tone='navy';}
   else if(code==='TR'||mark==='Training'){pill='Training';tone='blue';}
-  else if(code==='OT'||mark==='OT'||assignment?.className==='overtime'){pill='Overtime';tone='orange';}
+  else if(code==='OT'||mark==='OT'||assignment?.className==='overtime'){pill='Extra shift';tone='orange';}
   else if(code==='N'||assignment?.className==='night'){pill='Night';tone='indigo';}
   if(assignment?.className==='draft'&&tone==='green'){pill='Draft';tone='gray';}
   const clock=tinted?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>':'';
@@ -23280,7 +23301,7 @@ function renderRotaSummary(){
   const ot=weekly.filter(item=>item.code==='OT').length;
   const leave=weekly.filter(item=>item.code==='L').length;
   const off=weekly.filter(item=>item.code==='OFF').length;
-  if(weeklyBody)weeklyBody.innerHTML=`<tr><td>Total Staff</td><td class="mono">${staffCount}</td></tr><tr><td>Scheduled Hours</td><td class="mono">${rotaHoursLabel(scheduled)}</td></tr><tr><td>Overtime Cells</td><td class="mono" style="color:var(--purple)">${ot}</td></tr><tr><td>Leave Days</td><td class="mono" style="color:var(--amber)">${leave}</td></tr><tr><td>Off Days</td><td class="mono">${off}</td></tr>`;
+  if(weeklyBody)weeklyBody.innerHTML=`<tr><td>Total Staff</td><td class="mono">${staffCount}</td></tr><tr><td>Scheduled Hours</td><td class="mono">${rotaHoursLabel(scheduled)}</td></tr><tr><td>Extra Shifts</td><td class="mono" style="color:var(--purple)">${ot}</td></tr><tr><td>Leave Days</td><td class="mono" style="color:var(--amber)">${leave}</td></tr><tr><td>Off Days</td><td class="mono">${off}</td></tr>`;
   const tiles=document.getElementById('rota-weekly-summary');
   if(tiles){
     const icon=d=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true">${d}</svg>`;
@@ -23504,7 +23525,7 @@ function renderMonthlyRotaBoard(){
       ['blue',icon('<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14c2.4.2 4 1.7 4.5 4.5"/>'),String(staffAll.length),'Total Staff'],
       ['green',icon(cal+'<path d="m9 15 2 2 4-4"/>'),String(scheduledDays),'Scheduled Days'],
       ['violet',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),rotaHoursLabel(totalHours),'Total Scheduled Hours'],
-      ['amber',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),rotaHoursLabel(otHours),'Overtime Hours'],
+      ['amber',icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),rotaHoursLabel(otHours),'Extra Shift Hours'],
       ['pink',icon(cal),String(leaveDays),'Leave Days'],
     ].map(([tone,ic,val,lbl])=>`<div class="rs-kpi"><span class="rs-kpi-icon rs-kpi-${tone}">${ic}</span><span class="rs-kpi-text"><b>${escapeHtml(val)}</b><span>${escapeHtml(lbl)}</span></span></div>`).join('');
   }
@@ -23539,7 +23560,7 @@ function renderMonthlyRotaBoard(){
     }).join('');
     return `<tr><th scope="row" class="rs-mg-staff"><span class="rs-mg-name">${escapeHtml(staff.name)}</span><span class="rs-mg-sub">${escapeHtml(staff.department)}${staff.role?` · ${escapeHtml(staff.role)}`:''}</span></th>${cells}<td class="rs-mg-total">${total.toFixed(1)}</td></tr>`;
   }).join('');
-  const legend=`<div class="rs-mg-legend">${[['green','M / E','Working'],['indigo','N','Night'],['orange','OT','Overtime'],['blue','TR','Training'],['navy','PH','Holiday'],['leave','L','Leave'],['off','OFF','Day off'],['gray','','Draft']].map(([t,c,l])=>`<span><i class="rs-m-cell rs-m-${t}">${c||'·'}</i>${l}</span>`).join('')}</div>`;
+  const legend=`<div class="rs-mg-legend">${[['green','M / E','Working'],['indigo','N','Night'],['orange','OT','Extra shift'],['blue','TR','Training'],['navy','PH','Holiday'],['leave','L','Leave'],['off','OFF','Day off'],['gray','','Draft']].map(([t,c,l])=>`<span><i class="rs-m-cell rs-m-${t}">${c||'·'}</i>${l}</span>`).join('')}</div>`;
   board.innerHTML=notice+`<div class="rs-mg-wrap"><table class="rs-mg"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`+legend;
 }
 
@@ -23559,7 +23580,7 @@ function renderDepartmentRota(){
   // Morning needing 5 and Night needing 2.
   const REQUIRED={M:5,E:3,N:2,OT:1};
   if(coverage){
-    coverage.innerHTML=[['Morning','M'],['Evening','E'],['Night','N'],['Overtime','OT']].map(([label,code])=>{
+    coverage.innerHTML=[['Morning','M'],['Evening','E'],['Night','N'],['Extra shift','OT']].map(([label,code])=>{
       const required=REQUIRED[code];
       const assigned=counts[code]||0;
       const pct=Math.min(100,Math.round((assigned/required)*100));
@@ -23585,7 +23606,7 @@ function renderDepartmentRota(){
 function renderRotaCodes(){
   const row=document.getElementById('rota-code-row');
   if(!row)return;
-  row.innerHTML=[['M','Morning','green'],['E','Evening','violet'],['N','Night','indigo'],['OFF','Day Off','gray'],['L','Leave','amber'],['OT','Overtime','orange']]
+  row.innerHTML=[['M','Morning','green'],['E','Evening','violet'],['N','Night','indigo'],['OFF','Day Off','gray'],['L','Leave','amber'],['OT','Extra shift','orange']]
     .map(([code,label,tone])=>`<span class="rs-legend-chip rs-legend-${tone}"><b>${code}</b>${label}</span>`).join('');
 }
 
@@ -28138,7 +28159,7 @@ const _VC_HR_QUERIES=[
     const now=new Date(),monday=new Date(now);
     monday.setDate(now.getDate()-(now.getDay()+6)%7);
     const qs=new URLSearchParams({date_from:monday.toLocaleDateString('en-CA'),date_to:now.toLocaleDateString('en-CA')});
-    const rows=((await moduleApi(`/attendance/overtime-eligibility?${qs}`))?.rows||[]).filter(r=>r.eligible&&!r.request_id);
+    const rows=((await moduleApi(`/attendance/overtime-eligibility?${qs}`))?.rows||[]).filter(r=>r.eligible&&!r.request_id&&!r.extra_shift);
     if(!rows.length)return 'Nobody has un-requested overtime this week.';
     const names=[...new Set(rows.map(r=>r.employee))];
     return `${names.length} employee${names.length===1?'':'s'} worked eligible overtime this week without a request yet: ${_vcNames(names)}.`;
@@ -31140,7 +31161,7 @@ async function loadOtEligibility(){
     if(!_otEligibilityRows.length){body.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center">No employee worked past the standard day in this range.</td></tr>';return;}
     body.innerHTML=_otEligibilityRows.map((r,i)=>{
       const cls=!r.eligible?'b-r':r.eligibility.startsWith('Requested')?'b-g':'b-a';
-      const act=r.eligible&&!r.request_id?`<button class="btn btn-p btn-sm" onclick="requestOtFromAttendance(${i})">Request OT</button>`:'';
+      const act=r.eligible&&!r.request_id&&!r.extra_shift?`<button class="btn btn-p btn-sm" onclick="requestOtFromAttendance(${i})">Request OT</button>`:'';
       return `<tr><td>${escapeHtml(r.employee)}<div class="card-sub">${escapeHtml(r.employee_no)}${r.department?' · '+escapeHtml(r.department):''}</div></td><td>${escapeHtml(r.date)}${r.day_type==='weekend'?' <span class="b b-a">Weekend</span>':''}</td><td class="mono">${escapeHtml(r.clock_in||'—')}</td><td class="mono">${escapeHtml(r.clock_out||'—')}</td><td class="mono">${escapeHtml(r.worked)}${r.break?`<div class="card-sub">after ${escapeHtml(r.break)} break</div>`:''}</td><td class="mono">${escapeHtml(r.extra)}</td><td class="mono">${escapeHtml(r.eligible_ot)}</td><td><span class="b ${cls}">${escapeHtml(r.eligibility)}</span></td><td>${act}</td></tr>`;
     }).join('');
   }catch(err){body.innerHTML=`<tr><td colspan="9" style="color:var(--red);text-align:center">${escapeHtml(err.message||'Could not load')}</td></tr>`;}

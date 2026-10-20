@@ -421,6 +421,8 @@ def ess_team_today(request: Request, db: Session = Depends(get_db)) -> list[dict
             day_status = "weekend"
         elif is_holiday:
             day_status = "holiday"
+        elif rota_status.get((p.employee_no, today_iso)) == "off" and not has_punches:
+            day_status = "off"   # a rota day off stays a day off, also inside a leave
         elif p.id in on_leave_emp_ids:
             day_status = "leave"
         elif has_punches:

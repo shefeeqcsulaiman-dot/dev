@@ -780,7 +780,10 @@
     if (icon) {
       if (url) {
         icon.classList.add('has-logo');
-        icon.innerHTML = '<img src="' + escHtml(url) + '" alt="' + escHtml(emp.company_name || 'Company') + '">';
+        // Sizes inline as well: with an older cached stylesheet the logo drew at full size
+        // across the whole sidebar.
+        icon.style.overflow = 'hidden';
+        icon.innerHTML = '<img src="' + escHtml(url) + '" alt="' + escHtml(emp.company_name || 'Company') + '" style="display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain">';
         var img = icon.querySelector('img');
         img.onerror = function() { icon.classList.remove('has-logo'); img.remove(); };
       }
@@ -790,7 +793,7 @@
     if (box) {
       var mi = document.getElementById('m-company-logo');
       document.getElementById('m-company-name').textContent = emp.company_name || '';
-      if (url) { mi.src = url; mi.hidden = false; mi.onerror = function() { mi.hidden = true; }; } else mi.hidden = true;
+      if (url) { mi.style.cssText = 'height:28px;max-width:96px;object-fit:contain'; mi.src = url; mi.hidden = false; mi.onerror = function() { mi.hidden = true; }; } else mi.hidden = true;
       box.hidden = !(url || emp.company_name);
     }
   }
@@ -1170,8 +1173,9 @@
     if (raw === 'ph') return 'holiday';
     return 'shift';
   }
-  // Days between the first and last scheduled day with no rota entry are days off
-  // (or leave, when an approved leave covers them).
+  // Days between the first and last scheduled day with no rota entry are days off -- also
+  // inside an approved leave (a day off is not a leave day). A shift day inside approved
+  // leave shows as Leave.
   function _fillRotaDayOffs(rows) {
     var byDate = {};
     rows.forEach(function(a) { if (a.date) byDate[a.date] = true; });
@@ -1185,8 +1189,13 @@
       var iso = _isoDateLocal(d);
       if (byDate[iso]) continue;
       var lv = leaves.find(function(l) { return l.start_date <= iso && iso <= l.end_date; });
-      out.push(lv ? {date: iso, type: 'Leave', _gap: true, _leaveType: lv.leave_type} : {date: iso, type: 'Off', _gap: true});
+      out.push({date: iso, type: 'Off', _gap: true, _duringLeave: lv ? lv.leave_type : ''});
     }
+    out = out.map(function(a) {
+      if (a._gap || _rotaKind(a) !== 'shift') return a;
+      var lv = leaves.find(function(l) { return l.start_date <= a.date && a.date <= l.end_date; });
+      return lv ? Object.assign({}, a, {type: 'Leave', mark: 'Leave', _leaveType: lv.leave_type}) : a;
+    });
     return out.sort(function(a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
   }
   function _mondayOf(d) {
@@ -1227,10 +1236,10 @@
   }
   // Morning / Afternoon / Night from the shift's own name, else from its start time.
   function _rotaLook(a, kind) {
-    if (kind === 'off') return {icon: 'moon', tone: 'off', pill: 'Day Off', title: 'Day off', sub: a._gap ? 'No shift scheduled' : ''};
+    if (kind === 'off') return {icon: 'moon', tone: 'off', pill: 'Day Off', title: 'Day off', sub: a._duringLeave ? 'During your ' + a._duringLeave + ' (not counted)' : (a._gap ? 'No shift scheduled' : '')};
     if (kind === 'leave') return {icon: 'plane', tone: 'leave', pill: 'Leave', title: 'On leave', sub: a._leaveType || 'Approved leave'};
     if (kind === 'holiday') return {icon: 'star', tone: 'holiday', pill: 'Holiday', title: 'Public holiday', sub: a.holiday_name || ''};
-    if (kind === 'ot') return {icon: 'bolt', tone: 'ot', pill: 'Overtime'};
+    if (kind === 'ot') return {icon: 'bolt', tone: 'ot', pill: 'Extra shift'};
     if (kind === 'training') return {icon: 'book', tone: 'training', pill: 'Training'};
     var name = String(a.type || '').toLowerCase();
     var hour = parseInt(String(a.start || '').slice(0, 2), 10);
@@ -2039,8 +2048,8 @@
     var list = all ? _essOtElig : _essOtElig.slice(0, 5);
     el.innerHTML = '<div class="tbl-wrap m-stack" style="border:none"><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Status</th><th></th></tr></thead><tbody>' +
       list.map(function(r, i) {
-        var cls = !r.eligible ? 'rejected' : (r.eligibility.indexOf('Requested') === 0 ? 'approved' : 'pending');
-        var act = r.eligible && !r.request_id ? '<button class="btn-ghost" style="padding:5px 10px;font-size:11.5px" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
+        var cls = !r.eligible ? 'rejected' : (r.eligibility.indexOf('Requested') === 0 || r.extra_shift ? 'approved' : 'pending');
+        var act = r.eligible && !r.request_id && !r.extra_shift ? '<button class="btn-ghost" style="padding:5px 10px;font-size:11.5px" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
         return '<tr><td>' + escHtml(fmtShortDate(r.date)) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + (r.break ? '<div class="m-muted" style="font-size:11px">after ' + escHtml(r.break) + ' break</div>' : '') + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       (_essOtElig.length > 5 ? '<div class="att-more"><button type="button" class="btn-ghost" onclick="var c=document.getElementById(\'ot-elig-content\');c.dataset.all=c.dataset.all===\'1\'?\'\':\'1\';essLoadOtEligibility()">' + (all ? 'Show fewer' : 'Show all ' + _essOtElig.length + ' days') + '</button></div>' : '');

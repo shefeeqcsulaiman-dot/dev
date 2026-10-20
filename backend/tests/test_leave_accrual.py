@@ -69,7 +69,10 @@ def test_working_basis_skips_weekend_holidays_and_rota_days_off(client, db, auth
         # Without a rota: the company weekend applies.
         d = _days(client, auth_headers, no_rota, "Annual Leave", "2026-11-30", "2026-12-06")
         assert d["days"] == 3 and d["skipped"] == {"weekend": 2, "holiday": 2}
-        assert _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 7   # Calendar
+        # Calendar: holidays count, the 3 rota days off (Fri-Sun) do not (2026-10-20)
+        cal = _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")
+        assert cal["days"] == 4 and cal["skipped"] == {"day_off": 3}
+        assert _days(client, auth_headers, no_rota, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 7   # no rota
         _settings(client, auth_headers, leave_types=[{"type": "Sick Leave", "days": 90, "basis": "Working"}])
         assert _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 2   # its own Basis
     finally:

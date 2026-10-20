@@ -1556,6 +1556,11 @@ def _ot_cooloff_seconds(db: Session, company_id: str) -> int:
     return 0
 
 
+def _day_cooloff(shift: DayShift | None, cooloff_seconds: int) -> int:
+    """The OT cool-off for one day: none on an Extra shift (the whole shift is overtime)."""
+    return 0 if shift is not None and shift.extra else cooloff_seconds
+
+
 def _ot_after_cooloff(total_seconds: int, standard_seconds: int, cooloff_seconds: int) -> int:
     return max(0, total_seconds - standard_seconds - cooloff_seconds)
 
@@ -1632,7 +1637,10 @@ def _holiday_dates(db: Session, company_id: str) -> set[str]:
 
 
 def _shift_standard_seconds(shift: DayShift | None, default_seconds: int) -> int:
-    """A day's standard: the shift's own length (end - start - break), else the company standard."""
+    """A day's standard: the shift's own length (end - start - break), else the company standard.
+    An Extra shift has none: every hour worked on it is overtime."""
+    if shift is not None and shift.extra:
+        return 0
     length = shift.length_seconds() if shift is not None else None
     return length if length else default_seconds
 
@@ -1722,14 +1730,16 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
         sessions = [(getattr(d, f"clock_in_{n}"), getattr(d, f"clock_out_{n}")) for n in range(1, 6)]
         first_in = next((i for i, _ in sessions if i), None)
         last_out = next((o for _, o in reversed(sessions) if o), None)
-        eligible_seconds = _ot_after_cooloff(paid, day_standard, cooloff)
+        eligible_seconds = _ot_after_cooloff(paid, day_standard, _day_cooloff(shift, cooloff))
         req = requests.get((emp.id, d.work_date)) or requests.get((emp.employee_no, d.work_date)) or requests.get((emp.full_name.strip().lower(), d.work_date))
+        extra_shift = bool(shift and shift.extra)
         if eligible_seconds <= 0:
             eligibility = "Not eligible (within cool-off)"
         elif req:
             eligibility = f"Requested - {req.get('status') or 'Pending'}"
         else:
-            eligibility = "Eligible - not yet requested"
+            # An Extra shift is paid by the payroll run without a request (payroll._extra_shift_overtime).
+            eligibility = "Extra shift - paid automatically" if extra_shift else "Eligible - not yet requested"
         dow = (date.fromisoformat(d.work_date).weekday() + 1) % 7
         rows.append({
             "employee_id": emp.id,
@@ -1749,6 +1759,7 @@ def overtime_eligibility_rows(db: Session, company_id: str, employees: list[Empl
             "eligible_hours": round(eligible_seconds / 3600, 2),
             "eligible": eligible_seconds > 0,
             "eligibility": eligibility,
+            "extra_shift": extra_shift,
             "request_id": req.get("id") if req else None,
         })
     return rows
@@ -1909,7 +1920,7 @@ def attendance_monthly_report(
             shift = shifts.get((emp.employee_no, day))
             paid = _shift_paid_seconds(row, shift, offset)
             total_seconds_month += paid
-            ot_seconds_month += _ot_after_cooloff(paid, _shift_standard_seconds(shift, standard_seconds), ot_cooloff)
+            ot_seconds_month += _ot_after_cooloff(paid, _shift_standard_seconds(shift, standard_seconds), _day_cooloff(shift, ot_cooloff))
         leave_set = set(leave_dates_by_emp.get(emp.id, set()))
         off_days = 0
         for iso in working_day_set:
@@ -2233,7 +2244,7 @@ def attendance_employee_daily(
             # docstring: "8.95" looks like it could already be a time.
             "shift": f"{shift.start}-{shift.end}" if shift and shift.start and shift.end else None,
             "total_hours": _format_duration_hm(paid_day),
-            "ot_hours": _format_duration_hm(_ot_after_cooloff(paid_day, standard_day, ot_cooloff)) if has_punches else "0:00",
+            "ot_hours": _format_duration_hm(_ot_after_cooloff(paid_day, standard_day, _day_cooloff(shift, ot_cooloff))) if has_punches else "0:00",
             "under_hours": _format_duration_hm(max(0, standard_day - paid_day)) if has_punches and not (is_weekend or is_leave or is_holiday) else "0:00",
             "absent": "Yes" if is_absent else "",
             "sick": "Yes" if is_sick else "",

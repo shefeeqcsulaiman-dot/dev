@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=07be51f030" as="style">
-<link rel="preload" href="src/app.js?v=edf4f0385e" as="script">
+<link rel="preload" href="src/app.js?v=0cd5936a0d" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=07be51f030">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
@@ -5372,7 +5372,7 @@ period_locks ─&lt; audit_logs
   <div class="modal"><div class="modal-title">Edit Shift</div><div class="modal-sub" id="rota-edit-sub">Update the shift type, times and notes for this rota entry</div>
     <div class="fg"><label class="fl">Shift Type</label><select class="fi" id="rota-edit-type" onchange="applyRotaEditTypeDefaults()"><option>Morning</option><option>Evening</option><option>Night</option><option>Off</option><option>Leave</option><option>Overtime</option></select></div>
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="rota-edit-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="rota-edit-end" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="rota-edit-break" value="60"></div></div>
-    <div class="fg"><label class="fl">Mark As</label><select class="fi" id="rota-edit-mark"><option>Shift</option><option>Off</option><option>Leave</option><option>OT</option><option>Holiday</option><option>Training</option></select></div>
+    <div class="fg"><label class="fl">Mark As</label><select class="fi" id="rota-edit-mark"><option>Shift</option><option>Off</option><option>Leave</option><option value="OT">Extra shift</option><option>Holiday</option><option>Training</option></select><div class="fh" id="rota-edit-extra-hint" style="display:none;font-size:11.5px;color:var(--text3);margin-top:4px">Every hour worked on an extra shift counts as overtime.</div></div>
     <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="rota-edit-notes" rows="3" placeholder="Optional rota note"></textarea></div>
     <div class="modal-foot"><button class="btn btn-danger" onclick="removeRotaCellShift()">Remove Shift</button><button class="btn btn-g" onclick="closeM('m-edit-shift')">Cancel</button><button class="btn btn-p" onclick="saveRotaCellShift()">Save</button></div>
   </div>
@@ -5790,6 +5790,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=edf4f0385e" defer></script>
+<script src="src/app.js?v=0cd5936a0d" defer></script>
 </body>
 </html>

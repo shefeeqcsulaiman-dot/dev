@@ -205,6 +205,51 @@ def _overtime_pay(db: Session, company_id: str, employee_no: str, employee_name:
     return total
 
 
+def _ot_rates(db: Session, company_id: str) -> dict[str, Decimal]:
+    """Normal / weekend / holiday OT multipliers from HR Settings > OT Rules (same fallbacks
+    as the overtime form, updateOtMultiplier() in app.js)."""
+    row = db.query(AppDataRecord).filter(
+        AppDataRecord.company_id == company_id, AppDataRecord.collection == "hr_settings",
+        AppDataRecord.record_key == "ot-rules-config").first()
+    cfg = _payload(row) if row else {}
+
+    def rate(key: str, fallback: Decimal) -> Decimal:
+        try:
+            value = Decimal(str(cfg.get(key)))
+            return value if value > 0 else fallback
+        except Exception:
+            return fallback
+
+    normal = rate("multNormal", Decimal("1.25"))
+    weekend = rate("multWeekend", Decimal("1.5"))
+    return {"normal": normal, "weekend": weekend, "holiday": rate("multHoliday", weekend)}
+
+
+def _extra_shift_overtime(db: Session, company_id: str, employees: list[Employee], period: str) -> dict[str, list[tuple[Decimal, Decimal]]]:
+    """{employee_no: [(hours, OT multiplier), ...]} for Extra shifts (rota code OT) worked in the period: the
+    manager scheduled them, so their worked hours are approved overtime without a request
+    (2026-10-20). A day that already has an overtime request is left to that request (HR
+    may have adjusted or rejected it), so it is never paid twice."""
+    from datetime import date as _date
+
+    from app.routers.attendance import _holiday_dates, overtime_eligibility_rows
+
+    year, month = (int(x) for x in period.split("-"))
+    start, end = _date(year, month, 1), _date(year, month, calendar.monthrange(year, month)[1])
+    rows = [r for r in overtime_eligibility_rows(db, company_id, employees, start, end)
+            if r.get("extra_shift") and r.get("eligible") and not r.get("request_id")]
+    if not rows:
+        return {}
+    rates = _ot_rates(db, company_id)
+    holidays = _holiday_dates(db, company_id)
+    out: dict[str, Decimal] = {}
+    for r in rows:
+        kind = "holiday" if r["date"] in holidays else ("weekend" if r.get("day_type") == "weekend" else "normal")
+        out.setdefault(r["employee_no"], [])
+        out[r["employee_no"]].append((Decimal(str(r["eligible_hours"])), rates[kind]))
+    return out
+
+
 _MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
 
 
@@ -362,6 +407,7 @@ def generate_payroll(
         raise HTTPException(status_code=422, detail="No active employees found")
 
     ot_hours_per_month = _ot_hours_per_month(db, principal.company_id)
+    extra_shifts = _extra_shift_overtime(db, principal.company_id, employees, payload.period)
     run = PayrollRun(company_id=principal.company_id, branch_id=payload.branch_id, period=payload.period, status="draft")
     gross_total = Decimal("0.00")
     deductions_total = Decimal("0.00")
@@ -369,6 +415,9 @@ def generate_payroll(
     for employee in employees:
         allowances = money(employee.housing_allowance) + money(employee.transport_allowance) + money(employee.other_allowance)
         overtime = _overtime_pay(db, principal.company_id, employee.employee_no, employee.full_name, payload.period, employee.basic_salary, ot_hours_per_month)
+        hourly_rate = money(employee.basic_salary) / ot_hours_per_month
+        for hours, multiplier in extra_shifts.get(employee.employee_no, []):
+            overtime += (hours * hourly_rate * multiplier).quantize(Decimal("0.01"))
         # Loan/advance balances are only drained when the run is approved.
         loan_deduction = _employee_loan_deductions(db, principal.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)
         advance_deduction = _salary_advance_deductions(db, principal.company_id, employee.employee_no, employee.full_name, payload.period, apply=False)

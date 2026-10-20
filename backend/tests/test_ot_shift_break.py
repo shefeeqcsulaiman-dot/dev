@@ -88,3 +88,61 @@ def test_shift_setup_break_used_when_assignment_has_none_and_no_rota_means_no_de
     assert _eligibility(client, auth_headers, with_shift)["worked"] == "9:30"
     plain = _eligibility(client, auth_headers, no_rota)
     assert plain["worked"] == "10:00" and plain["break"] is None
+
+
+def test_extra_shift_hours_are_all_overtime(client, db, auth_headers):
+    """Rota "Mark As: Extra shift" (code OT): every hour worked that day is overtime, with no
+    standard day and no cool-off taken off (2026-10-20). Working exactly the shift used to
+    give 0 overtime, because the extra shift's own length became the day's standard."""
+    cid = _company_id(client, auth_headers)
+    emp = _employee(db, cid, uuid.uuid4().hex[:6])
+    _rota(db, cid, emp, code="OT", mark="OT", type="Overtime", break_minutes=0)
+    _punch(db, cid, emp, 8)
+    _punch(db, cid, emp, 16, direction="out")
+
+    row = _eligibility(client, auth_headers, emp)
+    assert row["extra_shift"] is True and row["eligible"] is True
+    assert row["standard"] == "0:00" and row["eligible_ot"] == row["worked"] and _hm(row["worked"]) > 0
+    assert row["eligibility"] == "Extra shift - paid automatically"
+
+    daily = client.get(f"/api/v1/attendance/employee-daily?employee_id={emp.id}&period=2026-07", headers=auth_headers).json()
+    day = next(d for d in daily["days"] if d["date"] == DAY)
+    assert day["ot_hours"] == row["worked"]
+
+
+def test_normal_shift_still_uses_its_length_as_standard(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    emp = _employee(db, cid, uuid.uuid4().hex[:6])
+    _rota(db, cid, emp, break_minutes=0)
+    _punch(db, cid, emp, 8)
+    _punch(db, cid, emp, 16, direction="out")
+    rows = client.get(f"/api/v1/attendance/overtime-eligibility?date_from={DAY}&date_to={DAY}", headers=auth_headers).json()["rows"]
+    assert all(r["employee_no"] != emp.employee_no for r in rows)   # worked exactly the shift: no overtime
+
+
+def test_extra_shift_overtime_is_paid_in_payroll_without_a_request(client, db, auth_headers):
+    """Auto-approved: the payroll run pays an Extra shift's worked hours at the OT rate, with
+    no overtime request; a day that has a request is left to that request (no double pay)."""
+    from decimal import Decimal
+
+    cid = _company_id(client, auth_headers)
+    emp = _employee(db, cid, uuid.uuid4().hex[:6])
+    _rota(db, cid, emp, code="OT", mark="OT", type="Overtime", break_minutes=0)
+    _punch(db, cid, emp, 8)
+    _punch(db, cid, emp, 16, direction="out")
+    worked = _hm(_eligibility(client, auth_headers, emp)["worked"]) / 60
+
+    other = _employee(db, cid, uuid.uuid4().hex[:6])
+    _rota(db, cid, other, code="OT", mark="OT", type="Overtime", break_minutes=0)
+    _punch(db, cid, other, 8)
+    _punch(db, cid, other, 16, direction="out")
+    _seed_app_record(db, cid, "overtimeRequests", f"req-{other.employee_no}", {
+        "id": f"req-{other.employee_no}", "employee_id": other.employee_no, "employee": other.full_name,
+        "date": DAY, "ot_hours": 1, "multiplier": "1.25x", "status": "Rejected"})
+
+    r = client.post("/api/v1/payroll/generate", headers=auth_headers, json={"period": "2026-07"})
+    assert r.status_code == 201, r.text
+    items = {i["employee_id"]: i for i in r.json()["items"]}
+    expected = (Decimal(str(worked)) * Decimal("5000") / Decimal("176") * Decimal("1.25")).quantize(Decimal("0.01"))
+    assert abs(Decimal(str(items[emp.id]["overtime"])) - expected) <= Decimal("0.01"), (items[emp.id], expected)
+    assert Decimal(str(items[other.id]["overtime"])) == 0   # HR rejected that day's request

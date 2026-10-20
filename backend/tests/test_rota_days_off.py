@@ -61,3 +61,18 @@ def test_monthly_report_employee_daily_and_today_respect_days_off(db, client, au
     assert {"employee_id": "ROFF-1", "employee_name": "Rota Off Person", "kind": "off"} in off_day["off"]
     worked_day = client.get("/api/v1/attendance/today?date=2026-08-24", headers=auth_headers).json()
     assert all(o["employee_id"] != "ROFF-1" for o in worked_day["off"])
+
+
+def test_rota_days_off_are_not_counted_for_calendar_day_leave(db, client, auth_headers):
+    """Calendar-day leave counts weekends and holidays, but a rota day off is never taken
+    from the balance (2026-10-20): Mon 24 shift, Tue 25 Off, Wed 26 no entry, Thu 27 shift."""
+    from app.routers.leave import leave_basis, leave_day_breakdown
+
+    company_id = _company_id(client, auth_headers)
+    _setup(db, company_id)
+    assert leave_basis(db, company_id, "ROFF-1", "Sick Leave") != "Working"
+    got = leave_day_breakdown(db, company_id, "ROFF-1", "Sick Leave", date(2026, 8, 24), date(2026, 8, 27))
+    assert got["calendar_days"] == 4 and got["days"] == 2 and got["skipped"] == {"day_off": 2}
+    # A week with no rota at all: nothing inferred, every day counts.
+    none = leave_day_breakdown(db, company_id, "ROFF-1", "Sick Leave", date(2026, 9, 1), date(2026, 9, 3))
+    assert none["days"] == 3 and none["skipped"] == {}

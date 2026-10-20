@@ -75,6 +75,9 @@ def rota_day_statuses(db: Session, company_id: str, employee_nos, start: date, e
     return out
 
 
+# Rota "Mark As: Extra shift" (shown as "OT" before 2026-10-20) is saved with this code.
+EXTRA_SHIFT_CODE = "OT"
+
 # Same defaults the rota screen uses when an assignment has no break saved (ROTA_EDIT_DEFAULTS).
 _DEFAULT_BREAK_MINUTES = {"M": 60, "E": 60, "N": 60}
 
@@ -116,11 +119,14 @@ def rota_break_seconds(db: Session, company_id: str, employee_nos, start: date, 
 
 class DayShift:
     """One employee's rota shift on one day: local "HH:MM" start/end (end may be past
-    midnight, i.e. not after start), unpaid break and late grace."""
-    __slots__ = ("start", "end", "break_seconds", "grace_minutes")
+    midnight, i.e. not after start), unpaid break and late grace. `extra`: an Extra shift
+    (rota code OT), whose worked hours are all overtime."""
+    __slots__ = ("start", "end", "break_seconds", "grace_minutes", "extra")
 
-    def __init__(self, start: str | None, end: str | None, break_seconds: int, grace_minutes: int | None):
+    def __init__(self, start: str | None, end: str | None, break_seconds: int, grace_minutes: int | None,
+                 extra: bool = False):
         self.start, self.end, self.break_seconds, self.grace_minutes = start, end, break_seconds, grace_minutes
+        self.extra = extra
 
     def length_seconds(self) -> int | None:
         """Scheduled paid time: end - start - break (an overnight shift wraps past midnight)."""
@@ -182,5 +188,6 @@ def rota_day_shifts(db: Session, company_id: str, employee_nos, start: date, end
             str(s)[:5] if _hm_minutes(s) is not None else None,
             str(e)[:5] if _hm_minutes(e) is not None else None,
             int((mins or 0) * 60), _grace(shift.get("grace")),
+            extra=code == EXTRA_SHIFT_CODE,
         )
     return out
