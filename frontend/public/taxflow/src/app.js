@@ -2702,12 +2702,49 @@ async function unassignEmployeeLocation(linkId){
   }catch(e){toast('Failed to unassign','err');}
 }
 
+// Company Locations: fill latitude/longitude from this device's GPS (stand at the site).
+function useCurrentLocationForCompanyLocation(btn){
+  if(!navigator.geolocation){toast('This browser cannot read your location','warn');return;}
+  const label=btn.innerHTML;
+  btn.disabled=true;btn.textContent='Finding your location…';
+  const done=()=>{btn.disabled=false;btn.innerHTML=label;};
+  navigator.geolocation.getCurrentPosition(pos=>{
+    done();
+    const {latitude,longitude,accuracy}=pos.coords;
+    document.getElementById('hr-loc-lat').value=latitude.toFixed(6);
+    document.getElementById('hr-loc-lng').value=longitude.toFixed(6);
+    const acc=Math.round(accuracy||0);
+    // A laptop without GPS often places itself by Wi-Fi or IP, hundreds of metres off.
+    if(acc>100)toast(`Location filled, but it is only accurate to about ±${acc} m. Use a phone at the site, or check it on a map.`,'warn');
+    else toast(`Location filled (accurate to about ±${acc} m)`,'ok');
+    const nameEl=document.getElementById('hr-loc-name');
+    if(nameEl&&!nameEl.value.trim())nameEl.focus();
+  },err=>{
+    done();
+    const msg=err&&err.code===1?'Location permission was blocked. Allow location for this site in the browser, then try again.'
+      :err&&err.code===3?'Getting your location took too long. Try again, near a window or outdoors.'
+      :'Could not get your location. Turn on location services and try again.';
+    toast(msg,'warn');
+  },{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+}
+
+// Pasting "25.2048, 55.2708" or a Google Maps link into Latitude fills both boxes.
+function splitPastedCoordinates(el){
+  const v=el.value||'';
+  const m=v.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/)||v.match(/[?&](?:q|query|ll)=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/)
+    ||v.match(/^\s*(-?\d{1,2}\.\d+)\s*[,\s]\s*(-?\d{1,3}\.\d+)\s*$/);
+  if(!m)return;
+  el.value=Number(m[1]).toFixed(6);
+  document.getElementById('hr-loc-lng').value=Number(m[2]).toFixed(6);
+}
+
 async function addCompanyLocation(){
   const name=(document.getElementById('hr-loc-name')?.value||'').trim();
   const lat=parseFloat(document.getElementById('hr-loc-lat')?.value);
   const lng=parseFloat(document.getElementById('hr-loc-lng')?.value);
   const radius=parseInt(document.getElementById('hr-loc-radius')?.value||'200',10);
   if(!name||Number.isNaN(lat)||Number.isNaN(lng)){toast('Enter a name and valid coordinates','warn');return;}
+  if(Math.abs(lat)>90||Math.abs(lng)>180){toast('Latitude must be between -90 and 90, longitude between -180 and 180','warn');return;}
   try{
     const r=await fetch(`${apiBaseUrl()}/hr/company-locations`,{method:'POST',headers:hrAccessHeaders(),
       body:JSON.stringify({location_name:name,latitude:lat,longitude:lng,allowed_radius_meters:radius})});

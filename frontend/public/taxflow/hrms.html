@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=07be51f030" as="style">
-<link rel="preload" href="src/app.js?v=f20dd1357f" as="script">
+<link rel="preload" href="src/app.js?v=eced73f90c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=07be51f030">
 <style>
@@ -1207,8 +1207,10 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
             <div class="card-title" style="margin-bottom:8px">Company Locations</div>
             <div class="flx" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">
               <input type="text" id="hr-loc-name" placeholder="Location name" style="max-width:140px">
-              <input type="text" id="hr-loc-lat" placeholder="Latitude" style="max-width:100px">
+              <input type="text" id="hr-loc-lat" placeholder="Latitude" style="max-width:100px" oninput="splitPastedCoordinates(this)" title="Type the latitude, or paste &quot;lat, lng&quot; or a Google Maps link">
               <input type="text" id="hr-loc-lng" placeholder="Longitude" style="max-width:100px">
+              <button type="button" class="btn btn-g btn-sm" id="hr-loc-here" onclick="useCurrentLocationForCompanyLocation(this)" title="Fill latitude and longitude from this device's GPS — use it while standing at the location">
+                <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-2px;margin-right:3px"><circle cx="8" cy="8" r="2.5"/><circle cx="8" cy="8" r="5.5"/><path d="M8 0.8v2M8 13.2v2M0.8 8h2M13.2 8h2"/></svg>Use my current location</button>
               <input type="number" id="hr-loc-radius" placeholder="Radius (m)" value="200" style="max-width:100px">
               <button class="btn btn-g btn-sm" onclick="addCompanyLocation()">+ Add</button>
             </div>
@@ -3303,7 +3305,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=f20dd1357f" defer></script>
+<script src="src/app.js?v=eced73f90c" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});
