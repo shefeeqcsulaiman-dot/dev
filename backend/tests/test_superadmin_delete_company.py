@@ -54,7 +54,7 @@ def _backups_in_tmp(tmp_path, monkeypatch):
 
 
 def _delete_and_purge(client, db, headers, company_id):
-    """Delete (to the recycle bin), then run the nightly purge as if 7 days had passed."""
+    """Delete (to the recycle bin), then run the nightly purge as if 30 days had passed."""
     from app import worker
 
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{company_id}", headers=headers, json={"password": "test12345"})
@@ -62,7 +62,7 @@ def _delete_and_purge(client, db, headers, company_id):
     db.expire_all()
     company = db.get(Company, company_id)
     assert company is not None and company.deleted_at is not None
-    company.deleted_at = datetime.now(UTC) - timedelta(days=8)
+    company.deleted_at = datetime.now(UTC) - timedelta(days=31)
     db.commit()
     result = worker.purge_recycle_bin()
     assert company_id in result["purged"], result
@@ -231,7 +231,7 @@ def test_delete_moves_company_to_recycle_bin_with_backup(client, db, _backups_in
     assert all(c["id"] != target.id for c in _rows(client.get("/api/v1/superadmin/companies", headers=headers).json()))
     bin_rows = client.get("/api/v1/superadmin/recycle-bin", headers=headers).json()
     row = next(c for c in bin_rows if c["id"] == target.id)
-    assert row["days_left"] in (6, 7) and row["backup_key"] == key
+    assert row["days_left"] in (29, 30) and row["backup_key"] == key
     # Deleting it again is refused.
     again = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
     assert again.status_code == 409
@@ -245,8 +245,9 @@ def test_delete_moves_company_to_recycle_bin_with_backup(client, db, _backups_in
     assert all(c["id"] != target.id for c in client.get("/api/v1/superadmin/recycle-bin", headers=headers).json())
 
 
-def test_delete_refused_when_backup_fails(client, db, monkeypatch):
-    """No backup, no delete: the company stays exactly as it was."""
+def test_delete_moves_to_bin_even_when_backup_fails(client, db, monkeypatch):
+    """Moving to the recycle bin removes nothing, so it no longer waits on a backup
+    (2026-10-21): the company is in the bin, with no stored backup recorded."""
     from app import storage
 
     _login_client_ref["client"] = client
@@ -261,10 +262,11 @@ def test_delete_refused_when_backup_fails(client, db, monkeypatch):
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
     assert r.status_code == 202, r.text
     status = client.get(f"/api/v1/superadmin/companies/{target.id}/delete-status", headers=headers).json()
-    assert status["status"] == "failed" and "nothing was deleted" in status["detail"], status
+    assert status["status"] == "done", status
     db.expire_all()
     company = db.get(Company, target.id)
-    assert company.deleted_at is None and company.subscription_expires_at == "2099-01-01"
+    assert company.deleted_at is not None and company.deleted_backup_key is None
+    assert company.deleted_prev_expiry == "2099-01-01"
 
 
 def test_purge_keeps_company_when_final_backup_fails(client, db, monkeypatch):
@@ -278,7 +280,7 @@ def test_purge_keeps_company_when_final_backup_fails(client, db, monkeypatch):
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
     assert r.status_code == 202, r.text
     db.expire_all()
-    db.get(Company, target.id).deleted_at = datetime.now(UTC) - timedelta(days=8)
+    db.get(Company, target.id).deleted_at = datetime.now(UTC) - timedelta(days=31)
     db.commit()
 
     def broken(*a, **k):
@@ -304,3 +306,65 @@ def test_purge_leaves_recently_deleted_companies(client, db):
     assert target.id not in result["purged"]
     db.expire_all()
     assert db.get(Company, target.id) is not None
+
+
+def _bin_company(client, db, name, trn):
+    _login_client_ref["client"] = client
+    target = Company(name=name, trn=trn)
+    db.add(target)
+    db.commit()
+    tid = target.id
+    headers = _make_superadmin(db)
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{tid}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 202, r.text
+    return tid, headers
+
+
+def test_delete_permanently_from_recycle_bin(client, db):
+    tid, headers = _bin_company(client, db, "Purge Now Co", "TARGET-PURGE-NOW")
+    url = f"/api/v1/superadmin/companies/{tid}/purge"
+    assert client.post(url, headers=headers, json={"password": "wrong", "confirm_name": "Purge Now Co"}).status_code == 403
+    assert client.post(url, headers=headers, json={"password": "test12345", "confirm_name": "Other Co"}).status_code == 400
+    r = client.post(url, headers=headers, json={"password": "test12345", "confirm_name": "  purge now co "})
+    assert r.status_code == 202, r.text
+    assert client.get(f"/api/v1/superadmin/companies/{tid}/delete-status", headers=headers).json()["status"] == "purged"
+    db.expire_all()
+    assert db.get(Company, tid) is None
+
+
+def test_delete_permanently_only_for_companies_in_the_bin(client, db):
+    _login_client_ref["client"] = client
+    live = Company(name="Live Co", trn="TARGET-PURGE-LIVE")
+    db.add(live)
+    db.commit()
+    headers = _make_superadmin(db)
+    r = client.post(f"/api/v1/superadmin/companies/{live.id}/purge", headers=headers, json={"password": "test12345", "confirm_name": "Live Co"})
+    assert r.status_code == 404
+
+
+def test_delete_permanently_keeps_company_when_final_backup_fails(client, db, monkeypatch):
+    from app import storage
+
+    tid, headers = _bin_company(client, db, "Purge Fail Co", "TARGET-PURGE-FAIL")
+
+    def broken(*a, **k):
+        raise OSError("bucket unreachable")
+    monkeypatch.setattr(storage, "upload_backup_file", broken)
+    r = client.post(f"/api/v1/superadmin/companies/{tid}/purge", headers=headers, json={"password": "test12345", "confirm_name": "Purge Fail Co"})
+    assert r.status_code == 202
+    status = client.get(f"/api/v1/superadmin/companies/{tid}/delete-status", headers=headers).json()
+    assert status["status"] == "failed" and "nothing was deleted" in status["detail"]
+    db.expire_all()
+    assert db.get(Company, tid) is not None
+
+
+def test_recycle_bin_keeps_companies_30_days(client, db):
+    from app import worker
+
+    tid, headers = _bin_company(client, db, "Thirty Day Co", "TARGET-THIRTY")
+    db.expire_all()
+    db.get(Company, tid).deleted_at = datetime.now(UTC) - timedelta(days=20)
+    db.commit()
+    assert tid not in worker.purge_recycle_bin()["purged"]
+    row = next(c for c in client.get("/api/v1/superadmin/recycle-bin", headers=headers).json() if c["id"] == tid)
+    assert row["days_left"] in (9, 10) and "backup_storage" in row

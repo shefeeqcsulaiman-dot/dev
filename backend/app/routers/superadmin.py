@@ -1025,10 +1025,11 @@ def _delete_status(company_id: str) -> dict | None:
 
 
 def _delete_to_recycle_bin(company_id: str, by_email: str, audit_company_id: str) -> None:
-    """Background part of Delete. Safety net 1: a full backup first; if it cannot be made,
-    nothing is deleted. Safety net 2: the recycle bin. The company is hidden from every list
-    and its sign-ins are blocked (expiry set to yesterday); Restore undoes this, and the
-    nightly purge (worker.purge_recycle_bin) deletes it for good after RECYCLE_BIN_DAYS."""
+    """Background part of Delete: the company goes to the recycle bin -- hidden from every
+    list, sign-ins blocked (expiry set to yesterday), every row kept. Activate (restore) undoes
+    it; "Delete permanently" or the nightly purge after RECYCLE_BIN_DAYS removes it, each with
+    a backup first. A backup is also taken now when backup storage is set up, but moving to
+    the bin no longer waits on one: nothing is removed yet (2026-10-21)."""
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -1038,15 +1039,13 @@ def _delete_to_recycle_bin(company_id: str, by_email: str, audit_company_id: str
             _set_delete_status(company_id, "done", "Already in the recycle bin")
             return
         label = f"{company.name} ({company.id})"
+        backup_key = None
         try:
             backup_key = backup_company_before_delete(db, company)
         except Exception as exc:
             db.rollback()
-            logger.error("Delete company %s: backup failed, nothing deleted: %s", label, exc)
-            _write_audit_blob(db, audit_company_id, by_email, "delete_company_failed", label, f"Backup failed, nothing was deleted: {exc}")
-            db.commit()
-            _set_delete_status(company_id, "failed", f"Backup failed, so nothing was deleted: {exc}")
-            return
+            company = db.get(Company, company_id)
+            logger.warning("Delete company %s: no backup taken now (%s); moving to the recycle bin anyway", label, exc)
         now = datetime.now(timezone.utc)
         company.deleted_prev_expiry = company.subscription_expires_at
         company.subscription_expires_at = (now.date() - timedelta(days=1)).isoformat()
@@ -1055,7 +1054,7 @@ def _delete_to_recycle_bin(company_id: str, by_email: str, audit_company_id: str
         company.deleted_backup_key = backup_key
         purge_on = (now + timedelta(days=RECYCLE_BIN_DAYS)).date().isoformat()
         _write_audit_blob(db, audit_company_id, by_email, "delete_company", label,
-                          f"Moved to recycle bin; backup {backup_key}; purge on {purge_on}")
+                          f"Moved to recycle bin; backup {backup_key or 'not taken (no backup storage)'}; purge on {purge_on}")
         db.commit()
         _set_delete_status(company_id, "done", f"Moved to the recycle bin; deleted for good on {purge_on}")
     except Exception as exc:
@@ -1072,12 +1071,14 @@ def delete_company_status(company_id: str, db: Session = Depends(get_db), _: Use
     bin reads as done even if this process never saw the delete."""
     status = _delete_status(company_id)
     company = db.query(Company.deleted_at).filter(Company.id == company_id).first()
+    if status and status.get("status") in ("running", "failed", "purged"):
+        return status
     if company and company.deleted_at:
         return {"status": "done", "detail": (status or {}).get("detail") or "In the recycle bin"}
     return status or {"status": "unknown", "detail": ""}
 
 
-RECYCLE_BIN_DAYS = 7
+RECYCLE_BIN_DAYS = 30
 _DELETED_BACKUP_PREFIX = "deleted-company-backups/"
 
 
@@ -1259,10 +1260,83 @@ def recycle_bin(db: Session = Depends(get_db), _: User = Depends(_require_supera
             "id": c.id, "name": c.name, "trn": c.trn,
             "deleted_at": deleted_at.isoformat(), "deleted_by": c.deleted_by,
             "backup_key": c.deleted_backup_key, "purge_on": purge_at.date().isoformat(),
+            "backup_storage": _backup_storage_ready(),
             "days_left": max(0, -int((now - purge_at).total_seconds() // 86400)),  # rounded up
             "users": db.query(func.count(User.id)).filter(User.company_id == c.id).scalar() or 0,
         })
     return out
+
+
+def _backup_storage_ready() -> bool:
+    """Backups can be kept somewhere that survives a deploy (S3 / DigitalOcean Spaces)."""
+    from app import storage
+    return not (storage.use_local_storage() and get_settings().app_env == "production")
+
+
+class PurgeCompanyIn(BaseModel):
+    password: str = Field(min_length=1)
+    confirm_name: str = Field(min_length=1)
+
+
+@router.post("/companies/{company_id}/purge", status_code=202)
+@limiter.limit("10/minute")
+def purge_deleted_company(
+    request: Request,
+    company_id: str,
+    payload: PurgeCompanyIn,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    """"Delete permanently" for a company in the recycle bin: password + the company's name
+    typed. A backup goes to backup storage first when it is set up; without storage the
+    superadmin downloads the backup from the recycle bin before confirming. Runs in the
+    background (big companies); poll GET /companies/{id}/delete-status."""
+    if not superadmin.password_hash or not verify_password(payload.password, superadmin.password_hash):
+        raise HTTPException(status_code=403, detail="Incorrect password")
+    company = db.query(Company).filter(Company.id == company_id, Company.deleted_at.isnot(None)).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found in the recycle bin")
+    if " ".join(payload.confirm_name.split()).lower() != " ".join(company.name.split()).lower():
+        raise HTTPException(status_code=400, detail="The company name does not match")
+    if (_delete_status(company_id) or {}).get("status") == "running":
+        raise HTTPException(status_code=409, detail="This company is already being deleted")
+    _set_delete_status(company_id, "running", "Deleting permanently")
+    background.add_task(_purge_now, company_id, superadmin.email, superadmin.company_id)
+    return {"ok": True, "status": "running"}
+
+
+def _purge_now(company_id: str, by_email: str, audit_company_id: str) -> None:
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        company = db.get(Company, company_id)
+        if not company:
+            _set_delete_status(company_id, "purged", "Deleted permanently")
+            return
+        label = f"{company.name} ({company.id})"
+        key = None
+        if _backup_storage_ready():
+            try:
+                key = backup_company_before_delete(db, company, "Final backup before permanent delete")
+            except Exception as exc:
+                db.rollback()
+                _write_audit_blob(db, audit_company_id, by_email, "purge_company_failed", label, f"Final backup failed, nothing deleted: {exc}")
+                db.commit()
+                _set_delete_status(company_id, "failed", f"The final backup failed, so nothing was deleted: {exc}")
+                return
+        purge_company(db, company)
+        _write_audit_blob(db, audit_company_id, by_email, "purge_company", label,
+                          f"Deleted permanently from the recycle bin; final backup {key or 'not stored (no backup storage)'}")
+        db.commit()
+        _set_delete_status(company_id, "purged", "Deleted permanently")
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Permanent delete of company %s failed", company_id)
+        _set_delete_status(company_id, "failed", f"Delete failed: {exc}")
+    finally:
+        db.close()
 
 
 @router.post("/companies/{company_id}/restore")

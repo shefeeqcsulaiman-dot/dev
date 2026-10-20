@@ -670,7 +670,7 @@
     <div class="card-hd">
       <div>
         <div class="card-title">Recycle Bin</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">Deleted companies. Each was backed up first; its users cannot sign in. Restore within 7 days, after that it is deleted for good (with one more backup).</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Deleted companies are kept here for 30 days and their users cannot sign in. Activate one to bring it back exactly as it was, or delete it permanently.</div>
       </div>
       <button class="btn btn-g btn-sm" onclick="loadRecycleBin()">Refresh</button>
     </div>
@@ -970,12 +970,29 @@
   </div>
 </div>
 
+<!-- Delete permanently (from the Recycle Bin) -->
+<div class="overlay" id="m-purge-co">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title" style="color:#e05252">Delete permanently</div>
+    <div class="modal-sub">This removes <b id="purge-co-name"></b> and all its data for good. It cannot be activated again.</div>
+    <div id="purge-co-backup-note" style="font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5"></div>
+    <div id="purge-co-err" class="err-msg"></div>
+    <input type="hidden" id="purge-co-id">
+    <div class="fg" style="margin-top:14px"><label class="fl">Type the company name to confirm</label><input class="fi" id="purge-co-confirm" autocomplete="off"></div>
+    <div class="fg"><label class="fl">Your Account Password</label><input class="fi mono" id="purge-co-pwd" type="password" autocomplete="off"></div>
+    <div class="modal-foot">
+      <button class="btn btn-g" onclick="closeModal('m-purge-co')">Cancel</button>
+      <button class="btn btn-r" id="purge-co-btn" onclick="confirmPurgeCompany()">Delete permanently</button>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Company Confirmation Modal -->
 <div class="overlay" id="m-delete-co">
   <div class="modal" style="max-width:420px">
     <div class="modal-title" style="color:#e05252">Delete Company</div>
     <div class="modal-sub" id="delete-co-sub"></div>
-    <div style="font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5">A full backup is taken first &mdash; if it fails, nothing is deleted. The company then goes to the <b>Recycle Bin</b>: its users can no longer sign in, and you can restore it for 7 days. After that it is deleted for good.</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5">The company moves to the <b>Recycle Bin</b> for 30 days: its users can no longer sign in, and nothing is removed yet. From the Recycle Bin you can <b>Activate</b> it again, download its backup, or <b>Delete permanently</b>.</div>
     <div id="delete-co-err" class="err-msg"></div>
     <input type="hidden" id="delete-co-id">
     <div class="fg" style="margin-top:16px"><label class="fl">Your Account Password</label><input class="fi mono" id="delete-co-pwd1" type="password" placeholder="Confirm your superadmin password" autocomplete="off"></div>
@@ -2291,7 +2308,7 @@
 
   // Follows a background delete: backup, then the Recycle Bin (GET .../delete-status).
   async function _watchCompanyDelete(companyId,name){
-    _saConfirm('Backing up '+name,'Taking a full backup of "'+name+'" before it goes to the Recycle Bin. This can take a few minutes for a big company — you can keep working, and this updates when it is done.',()=>{},{okText:'OK',okClass:'btn-p'});
+    _saConfirm('Deleting '+name,'Moving "'+name+'" to the Recycle Bin…',()=>{},{okText:'OK',okClass:'btn-p'});
     const started=Date.now();
     while(Date.now()-started<20*60*1000){
       await new Promise(r=>setTimeout(r,4000));
@@ -2301,7 +2318,7 @@
       closeModal('m-sa-confirm');
       loadDashboard();
       if(st.status==='done'){
-        _saConfirm('Moved to Recycle Bin','"'+name+'" was backed up and moved to the Recycle Bin. You can restore it there for 7 days.',()=>saGo('recycle'),{okText:'Open Recycle Bin',okClass:'btn-p'});
+        _saConfirm('Moved to Recycle Bin','"'+name+'" is in the Recycle Bin for 30 days. Its users can no longer sign in. Activate it there to bring it back.',()=>saGo('recycle'),{okText:'Open Recycle Bin',okClass:'btn-p'});
       }else{
         _saConfirm('Not deleted',(st.detail||'The backup failed, so nothing was deleted.')+' The details are in the Audit Log.',()=>{},{okText:'OK',okClass:'btn-p'});
       }
@@ -2542,19 +2559,60 @@
         <td><b>${escHtml(r.name)}</b>${r.trn?`<div style="font-size:11px;color:var(--muted)">TRN ${escHtml(r.trn)}</div>`:''}</td>
         <td style="white-space:nowrap">${escHtml(new Date(r.deleted_at).toLocaleString())}<div style="font-size:11px;color:var(--muted)">by ${escHtml(r.deleted_by||'—')}</div></td>
         <td style="text-align:right">${r.users}</td>
-        <td style="white-space:nowrap">${escHtml(r.purge_on)} <span style="color:${r.days_left<=1?'#e05252':'var(--muted)'}">(${r.days_left} day${r.days_left===1?'':'s'} left)</span>
-          <div style="font-size:11px;color:var(--muted)" title="${escHtml(r.backup_key||'')}">Backed up</div></td>
-        <td style="text-align:right"><button class="btn btn-p btn-sm" data-id="${escHtml(r.id)}" data-name="${escHtml(r.name)}" onclick="restoreDeletedCompany(this.dataset.id,this.dataset.name)">Restore</button></td>
+        <td style="white-space:nowrap">${escHtml(r.purge_on)} <span style="color:${r.days_left<=3?'#e05252':'var(--muted)'}">(${r.days_left} day${r.days_left===1?'':'s'} left)</span>
+          <div style="font-size:11px;color:var(--muted)" title="${escHtml(r.backup_key||'')}">${r.backup_key?'Backup stored':'No stored backup &mdash; download one before deleting'}</div></td>
+        <td style="text-align:right;white-space:nowrap" data-id="${escHtml(r.id)}" data-name="${escHtml(r.name)}" data-storage="${r.backup_storage?'1':''}">
+          <button class="btn btn-p btn-sm" onclick="restoreDeletedCompany(this.parentNode.dataset.id,this.parentNode.dataset.name)">Activate</button>
+          <button class="btn btn-g btn-sm" onclick="downloadCompanyBackup(this.parentNode.dataset.id,this.parentNode.dataset.name)" title="Download a full SQL backup of this company">Download backup</button>
+          <button class="btn btn-r btn-sm" onclick="openPurgeCompany(this.parentNode.dataset)">Delete permanently</button></td>
       </tr>`).join('')}</tbody></table></div>`;
     }catch(err){ if(wrap)wrap.innerHTML=`<div class="err-msg" style="display:block">${escHtml(err.message)}</div>`; }
   }
 
   function restoreDeletedCompany(id,name){
-    _saConfirm('Restore company','Restore "'+name+'"? Its users can sign in again, with the subscription expiry it had before it was deleted.',async()=>{
+    _saConfirm('Activate company','Activate "'+name+'" again? It comes back exactly as it was, and its users can sign in with the subscription expiry it had before.',async()=>{
       const res=await apiFetch(`/superadmin/companies/${encodeURIComponent(id)}/restore`,{method:'POST'});
-      if(!res.ok){const d=await res.json().catch(()=>({}));alert(d.detail||'Restore failed.');}
+      if(!res.ok){const d=await res.json().catch(()=>({}));alert(d.detail||'Activate failed.');}
       loadDashboard();
-    },{okText:'Restore',okClass:'btn-p'});
+    },{okText:'Activate',okClass:'btn-p'});
+  }
+
+  // Delete permanently (POST /superadmin/companies/{id}/purge): password + the name typed.
+  function openPurgeCompany(d){
+    document.getElementById('purge-co-id').value=d.id;
+    document.getElementById('purge-co-name').textContent=d.name;
+    document.getElementById('purge-co-backup-note').innerHTML=d.storage
+      ?'A final backup is saved to backup storage first.'
+      :'<b>Backup storage is not set up</b>, so no copy will be kept. Download the backup first if you may need this company\'s data.';
+    ['purge-co-confirm','purge-co-pwd'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('purge-co-err').style.display='none';
+    openModal('m-purge-co');
+  }
+  async function confirmPurgeCompany(){
+    const id=document.getElementById('purge-co-id').value, name=document.getElementById('purge-co-name').textContent;
+    const errEl=document.getElementById('purge-co-err'); errEl.style.display='none';
+    const confirm_name=document.getElementById('purge-co-confirm').value, password=document.getElementById('purge-co-pwd').value;
+    if(confirm_name.trim().toLowerCase()!==name.trim().toLowerCase()){errEl.textContent='Type the company name exactly to confirm.';errEl.style.display='block';return;}
+    if(!password){errEl.textContent='Enter your password.';errEl.style.display='block';return;}
+    const btn=document.getElementById('purge-co-btn'); btn.disabled=true; btn.textContent='Deleting…';
+    try{
+      const res=await apiFetch(`/superadmin/companies/${encodeURIComponent(id)}/purge`,{method:'POST',body:JSON.stringify({password,confirm_name})});
+      if(!res.ok){errEl.textContent=await _saErrorText(res,'Delete failed.');errEl.style.display='block';return;}
+      closeModal('m-purge-co');
+      _saConfirm('Deleting permanently','Deleting "'+name+'" and all its data…',()=>{},{okText:'OK',okClass:'btn-p'});
+      const started=Date.now();
+      while(Date.now()-started<20*60*1000){
+        await new Promise(r=>setTimeout(r,3000));
+        let st=null;
+        try{const r=await apiFetch(`/superadmin/companies/${encodeURIComponent(id)}/delete-status`);if(r.ok)st=await r.json();}catch(e){}
+        if(!st||st.status==='running'||st.status==='unknown')continue;
+        closeModal('m-sa-confirm'); loadDashboard();
+        if(st.status==='purged')_saConfirm('Deleted permanently','"'+name+'" and all its data have been deleted.',()=>{},{okText:'OK',okClass:'btn-p'});
+        else _saConfirm('Not deleted',(st.detail||'Delete failed.')+' The company is still in the Recycle Bin.',()=>{},{okText:'OK',okClass:'btn-p'});
+        return;
+      }
+    }catch(err){errEl.textContent=err.message;errEl.style.display='block';}
+    finally{btn.disabled=false;btn.textContent='Delete permanently';}
   }
 
   async function loadTrialRequests(){
