@@ -1306,7 +1306,7 @@ def check_in(
         raise HTTPException(status_code=422, detail="Your phone did not report a location. Turn on location services and try again.")
     nearest = _nearest_assigned_location(db, emp.id, payload.latitude, payload.longitude)
     if not nearest:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No work location assigned")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You have no work location for GPS check-in yet. Ask HR to assign you to one.")
     loc, distance = nearest
     max_accuracy = max(_MAX_GPS_ACCURACY_METERS, loc.allowed_radius_meters)
     if payload.accuracy is None or payload.accuracy > max_accuracy:

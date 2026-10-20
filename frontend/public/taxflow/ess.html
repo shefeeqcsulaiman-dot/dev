@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=b7bf6dbb5c">
+  <link rel="stylesheet" href="src/ess.css?v=183c2cf90a">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -370,6 +370,10 @@
           <button type="button" onclick="essGoTab('leave')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M12 20V9"/><path d="M5 9a7 7 0 0 1 14 0z"/></svg><span>Leave and holidays</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
           <button type="button" onclick="essGoTab('tasks')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg><span>My tasks</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
           <button type="button" onclick="essGoTab('team');loadTeamTab()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14a6 6 0 0 1 3 6"/></svg><span>My team</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('attendance');essScrollTo('att-daily-card')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Attendance history</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('requests')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg><span>My requests</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essGoTab('profile');essScrollTo('pw-card','pw-current')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Change password</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button type="button" onclick="essToggleTheme()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg><span id="m-theme-label">Dark mode</span><span class="m-switch" id="m-theme-switch" aria-hidden="true"></span></button>
           <button type="button" id="m-install" hidden onclick="essInstallApp()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg><span id="m-install-label">Install the app</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
           <button type="button" class="m-danger" onclick="essLogout()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></svg><span>Sign out</span></button>
         </div>
@@ -393,7 +397,7 @@
         <div class="card-title">My Documents</div>
         <div id="docs-content" class="loading">Loading…</div>
       </div>
-      <div class="card">
+      <div class="card" id="pw-card">
         <div class="card-title">Change Password</div>
         <div id="pw-err" class="err-box"></div>
         <div id="pw-ok" class="success-box" style="display:none">Password updated.</div>
@@ -452,17 +456,18 @@
           <div id="att-today"><div class="loading">Loading…</div></div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="att-daily-card">
         <div class="card-hd" style="margin-bottom:14px;align-items:center">
           <div class="card-title" style="margin-bottom:0">Daily Attendance</div>
           <button class="btn-ghost" style="padding:7px 14px;font-size:12.5px" onclick="essOpenRequestModal('correction')">Request correction</button>
         </div>
-        <div class="tbl-wrap">
+        <div class="tbl-wrap m-stack">
           <table>
             <thead><tr><th>Date</th><th>First In</th><th>Last Out</th><th>Hours</th><th>Punches</th><th>Source</th></tr></thead>
             <tbody id="att-body"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
           </table>
         </div>
+        <div class="att-more" id="att-more" hidden></div>
       </div>
     </div>
 
@@ -531,10 +536,6 @@
     <!-- Requests -->
     <div class="tab-body" id="tb-requests">
       <div class="card" style="margin-bottom:14px">
-        <div class="card-hd"><div><div class="card-title" style="margin-bottom:2px">Overtime Eligibility</div><div style="font-size:11.5px;color:var(--text3)" id="ot-elig-note">Days you worked past your standard day (last 31 days)</div></div></div>
-        <div id="ot-elig-content" class="loading">Loading…</div>
-      </div>
-      <div class="card">
         <div class="card-hd" style="align-items:center;flex-wrap:wrap">
           <div>
             <div class="card-title" style="margin-bottom:2px">My Requests</div>
@@ -551,6 +552,10 @@
         </div>
         <div class="ess-view-toggle" id="req-filter" style="flex-wrap:wrap"></div>
         <div id="requests-content" class="loading">Loading…</div>
+      </div>
+          <div class="card" style="margin-top:14px">
+        <div class="card-hd"><div><div class="card-title" style="margin-bottom:2px">Overtime Eligibility</div><div style="font-size:11.5px;color:var(--text3)" id="ot-elig-note">Days you worked past your standard day (last 31 days)</div></div></div>
+        <div id="ot-elig-content" class="loading">Loading…</div>
       </div>
     </div>
 
@@ -676,7 +681,7 @@
       <div class="att-summary" id="team-summary"></div>
       <div class="card" id="team-today-card" style="margin-bottom:16px">
         <div class="card-title" id="team-today-title">My Team — Today</div>
-        <div class="tbl-wrap">
+        <div class="tbl-wrap m-stack">
           <table>
             <thead><tr><th>Employee</th><th>Designation</th><th>Status</th><th>Check-In</th></tr></thead>
             <tbody id="team-today-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
@@ -685,7 +690,7 @@
       </div>
       <div class="card" id="dept-team-card" style="display:none;margin-bottom:16px">
         <div class="card-title" id="dept-team-title">Department Team</div>
-        <div class="tbl-wrap">
+        <div class="tbl-wrap m-stack">
           <table>
             <thead><tr><th>Employee</th><th>Department</th><th>Designation</th><th>Status</th></tr></thead>
             <tbody id="dept-team-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
@@ -694,7 +699,7 @@
       </div>
       <div class="card" id="gps-team-card">
         <div class="card-title">Team — Live Attendance</div>
-        <div class="tbl-wrap">
+        <div class="tbl-wrap m-stack">
           <table>
             <thead><tr><th>Employee</th><th>Checked In</th><th>Geofence</th><th>Last Ping</th></tr></thead>
             <tbody id="team-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
@@ -781,6 +786,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/ess.js?v=7fbf468eba" defer></script>
+<script src="src/ess.js?v=ec42c5baa0" defer></script>
 </body>
 </html>

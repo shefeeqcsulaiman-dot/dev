@@ -120,9 +120,98 @@
     return new Promise(function(resolve, reject) {
       if (!navigator.geolocation) { reject(new Error('GPS is not available on this device/browser.')); return; }
       navigator.geolocation.getCurrentPosition(resolve, function(e) {
-        reject(new Error(e.code === 1 ? 'Location permission denied. Enable location access to check in.' : 'Could not get your location. Try again.'));
+        var err = new Error(e.code === 1 ? 'Location permission denied. Enable location access to check in.'
+          : e.code === 3 ? 'Finding your location took too long. Move near a window or outdoors and try again.'
+          : 'Could not get your location. Make sure location (GPS) is turned on and try again.');
+        err.locationDenied = e.code === 1;
+        reject(err);
       }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
     });
+  }
+
+  // ── Location permission help ──
+  // A web page cannot make the phone ask again once location was denied, so: explain before
+  // the first ask (the phone's own prompt follows), and after a denial show the steps for
+  // this phone and browser to switch it back on, with Try again.
+  async function _essLocationState() {
+    try {
+      if (navigator.permissions && navigator.permissions.query) return (await navigator.permissions.query({name: 'geolocation'})).state;
+    } catch (e) {}
+    return 'unknown';
+  }
+  function _essLocationSteps() {
+    var ua = navigator.userAgent || '';
+    var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    var inApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|; wv\)/.test(ua);
+    var steps;
+    if (inApp) {
+      steps = ['Open this page in ' + (ios ? 'Safari' : 'Chrome') + ': tap <b>&#8942;</b> or <b>Share</b> and choose <b>Open in browser</b>.',
+               'Sign in, tap <b>Check in</b> and choose <b>Allow</b>.'];
+    } else if (ios && /CriOS/.test(ua)) {
+      steps = ['Open the iPhone <b>Settings</b> app &rarr; <b>Chrome</b> &rarr; <b>Location</b> &rarr; <b>While Using the App</b>.',
+               'Make sure <b>Settings &rarr; Privacy &amp; Security &rarr; Location Services</b> is on.',
+               'Come back here and tap <b>Try again</b>.'];
+    } else if (ios) {
+      steps = ['In the address bar, tap <b>aA</b> (or the page menu) &rarr; <b>Website Settings</b> &rarr; <b>Location</b> &rarr; <b>Allow</b>.',
+               'Still blocked? Open <b>Settings &rarr; Privacy &amp; Security &rarr; Location Services</b>: turn it on, then <b>Safari Websites</b> &rarr; <b>While Using the App</b>.',
+               'Come back here and tap <b>Try again</b>.'];
+    } else if (/Android/.test(ua)) {
+      steps = ['Tap the icon left of the address (<b>&#9881;</b> or the lock) &rarr; <b>Permissions</b> &rarr; <b>Location</b> &rarr; <b>Allow</b>.',
+               'Make sure the phone\u2019s <b>Location</b> is on (swipe down from the top of the screen).',
+               'Come back here and tap <b>Try again</b>.'];
+    } else {
+      steps = ['Click the lock or settings icon left of the address &rarr; <b>Location</b> &rarr; <b>Allow</b>.',
+               'Reload the page if asked, then click <b>Try again</b>.'];
+    }
+    return '<ol class="loc-steps">' + steps.map(function(s) { return '<li>' + s + '</li>'; }).join('') + '</ol>';
+  }
+  // mode 'ask': before the phone's prompt; 'denied': after a denial. Resolves true to go on.
+  function essLocationHelp(mode) {
+    return new Promise(function(resolve) {
+      var old = document.getElementById('loc-help'); if (old) old.remove();
+      var o = document.createElement('div');
+      o.id = 'loc-help';
+      o.className = 'ess-overlay on';
+      o.setAttribute('role', 'dialog');
+      o.setAttribute('aria-modal', 'true');
+      var pin = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+      o.innerHTML = '<div class="ess-modal loc-help">' +
+        '<div class="loc-help-icon' + (mode === 'denied' ? ' off' : '') + '">' + pin + '</div>' +
+        (mode === 'denied'
+          ? '<div class="ess-modal-title">Turn on location to check in</div><p class="loc-help-text">Location is blocked for this site, so your check-in can\u2019t be confirmed at your workplace.</p>' + _essLocationSteps()
+          : '<div class="ess-modal-title">Allow location to check in</div><p class="loc-help-text">Your location is used only when you check in or out, to confirm you are at your workplace. On the next screen your phone will ask &mdash; choose <b>Allow</b>' + (/iPhone|iPad/.test(navigator.userAgent) ? ' (or <b>Allow While Using App</b>)' : '') + '.</p>') +
+        '<div class="ess-modal-foot"><button type="button" class="btn-ghost" data-r="0">' + (mode === 'denied' ? 'Close' : 'Not now') + '</button>' +
+        '<button type="button" class="btn-login" style="width:auto;padding:11px 22px" data-r="1">' + (mode === 'denied' ? 'Try again' : 'Continue') + '</button></div></div>';
+      document.body.appendChild(o);
+      var close = function(v) { o.remove(); resolve(v); };
+      o.addEventListener('click', function(e) {
+        var r = e.target.closest && e.target.closest('[data-r]');
+        if (r) close(r.getAttribute('data-r') === '1');
+        else if (e.target === o) close(false);
+      });
+      var go = o.querySelector('[data-r="1"]'); if (go) go.focus();
+    });
+  }
+  // Location for check-in: explains first, and on a denial shows the steps and retries.
+  async function essGetCheckInPosition() {
+    var state = await _essLocationState();
+    if (state === 'denied') {
+      if (!(await essLocationHelp('denied'))) throw Object.assign(new Error('Location is turned off for this site.'), {quiet: true});
+    } else if (state === 'prompt' || state === 'unknown') {
+      var asked = false;
+      try { asked = localStorage.getItem('ess_loc_explained') === '1'; } catch (e) {}
+      if (!asked) {
+        try { localStorage.setItem('ess_loc_explained', '1'); } catch (e) {}
+        if (state === 'prompt' && !(await essLocationHelp('ask'))) throw Object.assign(new Error('Check-in needs your location.'), {quiet: true});
+      }
+    }
+    for (;;) {
+      try { return await getPosition(); }
+      catch (e) {
+        if (!e.locationDenied) throw e;
+        if (!(await essLocationHelp('denied'))) { e.quiet = true; throw e; }
+      }
+    }
   }
 
   function gpsSetStatus(text, isErr) {
@@ -155,7 +244,7 @@
     var btn = document.getElementById('gps-checkin-btn');
     btn.disabled = true;
     try {
-      var pos = await getPosition();
+      var pos = await essGetCheckInPosition();
       var r = await fetch(apiBase() + '/hr/check-in', {
         method: 'POST', headers: essHeaders(),
         body: JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, device: navigator.userAgent.substring(0,120)})
@@ -164,7 +253,11 @@
       var d = await r.json();
       if (r.ok) { await refreshGpsStatus(); }
       else { gpsSetStatus(typeof d.detail === 'string' ? d.detail : 'Your phone sent a location the server could not use. Try again.', true); }
-    } catch(e) { gpsSetStatus(e.message || 'Check-in failed.', true); }
+    } catch(e) {
+      gpsSetStatus(e.message || 'Check-in failed.', true);
+      // Already explained in the location pop-up: no second message on top.
+      if (e.quiet) { var ge = document.getElementById('gps-err'); if (ge) ge.dataset.quiet = '1'; }
+    }
     btn.disabled = false;
   }
 
@@ -341,7 +434,37 @@
     var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     try { localStorage.setItem('ess_theme', next); } catch (e) {}
     essApplyTheme(next);
+    _essSyncThemeSwitch();
   }
+  function _essSyncThemeSwitch() {
+    var sw = document.getElementById('m-theme-switch');
+    if (sw) sw.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
+  }
+  document.addEventListener('DOMContentLoaded', _essSyncThemeSwitch);
+  // Me menu shortcuts that open a tab at one card (and optionally focus a field).
+  function essScrollTo(id, focusId) {
+    setTimeout(function() {
+      var el = document.getElementById(id);
+      if (el) el.scrollIntoView({block: 'start'});
+      var f = focusId && document.getElementById(focusId);
+      if (f) setTimeout(function() { f.focus({preventScroll: true}); }, 400);
+    }, 250);
+  }
+  // Phones show .m-stack tables as one card per row; each cell's label comes from its column.
+  function _essLabelTables(root) {
+    (root || document).querySelectorAll('.m-stack table').forEach(function(t) {
+      var heads = [].map.call(t.querySelectorAll('thead th'), function(th) { return th.textContent.trim(); });
+      t.querySelectorAll('tbody tr').forEach(function(tr) {
+        [].forEach.call(tr.children, function(td, i) { if (!td.hasAttribute('data-label') && heads[i]) td.setAttribute('data-label', heads[i]); });
+      });
+    });
+  }
+  var _essLabelPending = false;
+  new MutationObserver(function() {
+    if (_essLabelPending) return;   // once per frame, however many rows were drawn
+    _essLabelPending = true;
+    setTimeout(function() { _essLabelPending = false; _essLabelTables(); }, 30);
+  }).observe(document.documentElement, {childList: true, subtree: true});
   essApplyTheme(document.documentElement.getAttribute('data-theme') || 'light');
 
   var _essData = { attendance: [], leave: [], rota: [], tasks: [], payslips: [] };
@@ -485,8 +608,14 @@
     renderAttToday(days, todayStr);
     renderAttCalendar(days);
     if (!body) return;
-    if (!days.length) { body.innerHTML = '<tr><td colspan="6">' + emptyState('clock', 'No attendance records yet', 'Your check-ins from the biometric device or GPS will show up here, one row per day.') + '</td></tr>'; return; }
-    body.innerHTML = days.map(function(d) {
+    var moreEl = document.getElementById('att-more');
+    if (!days.length) { if (moreEl) moreEl.hidden = true; body.innerHTML = '<tr><td colspan="6">' + emptyState('clock', 'No attendance records yet', 'Your check-ins from the biometric device or GPS will show up here, one row per day.') + '</td></tr>'; return; }
+    var shown = days.slice(0, _essAttShown);
+    if (moreEl) {
+      moreEl.hidden = days.length <= _essAttShown;
+      moreEl.innerHTML = '<button type="button" class="btn-ghost" onclick="essAttShowMore()">Show ' + Math.min(14, days.length - _essAttShown) + ' more days <span style="color:var(--text3)">(' + (days.length - _essAttShown) + ' older)</span></button>';
+    }
+    body.innerHTML = shown.map(function(d) {
       var out;
       if (d.last) out = String(d.last.punch_time).substring(11, 16);
       else if (d.date === todayStr) out = '<span class="att-pill live">On shift</span>';
@@ -499,6 +628,9 @@
         '</td><td>' + (d.mins != null ? _fmtDur(d.mins) : '—') + '</td><td>' + d.count + '</td><td>' + escHtml(d.source) + '</td></tr>';
     }).join('');
   }
+
+  var _essAttShown = 14;
+  function essAttShowMore() { _essAttShown += 14; renderAttendance(); }
 
   function _attCorrections() {
     var fixes = (_essRequests || []).filter(function(q) { return q.kind === 'correction'; }).slice(0, 4);
@@ -1028,8 +1160,9 @@
   function _rotaWeekLabel(shiftDate, thisMonday) {
     var mon = _mondayOf(shiftDate);
     var diffWeeks = Math.round((mon - thisMonday) / (7 * 86400000));
-    if (diffWeeks <= 0) return 'This Week';
+    if (diffWeeks === 0) return 'This Week';
     if (diffWeeks === 1) return 'Next Week';
+    if (diffWeeks === -1) return 'Last Week';
     var end = new Date(mon); end.setDate(mon.getDate() + 6);
     var fmt = function(d) { return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'}); };
     return fmt(mon) + ' – ' + fmt(end);
@@ -1112,6 +1245,8 @@
         var lastWeekLabel = null;
         var html = '';
         rows = _fillRotaDayOffs(rows);
+        // The default view is "this week onwards": earlier days from the API were labelled "This Week".
+        if (!month) { var mondayIso = _isoDateLocal(thisMonday); rows = rows.filter(function(a) { return !a.date || a.date >= mondayIso; }); }
         rows.forEach(function(a, index) {
           var d = new Date((a.date || '') + 'T00:00:00');
           var valid = !isNaN(d.getTime());
@@ -1210,6 +1345,43 @@
   // week at a time, mirroring what HRMS admins already see in Rota &
   // Shift's own "Department Rota" tab. Previously ESS only ever showed an
   // employee their OWN shifts with no way to see who else is on with them.
+  // Phones: a 7-day strip and, for the chosen day, everyone's shift as a list (the full
+  // week table needs sideways scrolling on a small screen).
+  var _deptRotaDay = null;
+  function _deptRotaDayView(employees, byEmpDate, dayDates, todayStr) {
+    var isos = dayDates.map(_isoDateLocal);
+    if (!_deptRotaDay || isos.indexOf(_deptRotaDay) < 0) _deptRotaDay = isos.indexOf(todayStr) >= 0 ? todayStr : isos[0];
+    var strip = '<div class="drd-strip" role="tablist">' + dayDates.map(function(dd, i) {
+      var iso = isos[i];
+      return '<button type="button" role="tab" aria-selected="' + (iso === _deptRotaDay) + '" class="drd-day' + (iso === _deptRotaDay ? ' on' : '') + (iso === todayStr ? ' today' : '') + '" onclick="essDeptRotaPick(\'' + iso + '\')">' +
+        '<span>' + ROTA_WEEK_DAY_LABELS[i].slice(0, 3) + '</span><b>' + dd.getDate() + '</b></button>';
+    }).join('') + '</div>';
+    var counts = {work: 0, off: 0, leave: 0};
+    var rows = employees.map(function(emp) {
+      var scheduled = isos.some(function(iso) { return byEmpDate[emp.employee_no + '|' + iso]; });
+      var a = byEmpDate[emp.employee_no + '|' + _deptRotaDay];
+      var kind = a ? _rotaKind(a) : (scheduled ? 'off' : '');
+      var right, cls = '';
+      if (!kind) { right = '<span class="drd-tag blank">Not scheduled</span>'; }
+      else if (kind === 'off' || !a.code) { right = '<span class="drd-tag off">Off</span>'; counts.off++; cls = ' is-off'; }
+      else if (kind === 'leave') { right = '<span class="drd-tag leave">Leave</span>'; counts.leave++; cls = ' is-off'; }
+      else if (kind === 'holiday') { right = '<span class="drd-tag holiday">Holiday</span>'; counts.off++; cls = ' is-off'; }
+      else {
+        counts.work++;
+        var tasks = Array.isArray(a.tasks) ? a.tasks.length : 0;
+        right = '<div class="drd-shift"><b>' + escHtml(a.start && a.end ? a.start + '–' + a.end : a.code) + '</b><small>' + escHtml(a.code) + (tasks ? ' · ' + tasks + ' task' + (tasks === 1 ? '' : 's') : '') + '</small></div>';
+      }
+      var initials = String(emp.full_name || '?').split(/\s+/).map(function(w) { return w.charAt(0); }).slice(0, 2).join('').toUpperCase();
+      return '<div class="drd-row' + cls + (emp.is_me ? ' is-me' : '') + '"><span class="drd-av">' + escHtml(initials) + '</span>' +
+        '<div class="drd-who"><b>' + escHtml(emp.full_name) + (emp.is_me ? ' (You)' : '') + '</b><small>' + escHtml(emp.designation || '') + '</small></div>' + right + '</div>';
+    }).join('');
+    var day = new Date(_deptRotaDay + 'T00:00:00').toLocaleDateString('en-GB', {weekday: 'long', day: 'numeric', month: 'short'});
+    return '<div class="drd m-only">' + strip +
+      '<div class="drd-sum">' + escHtml(day) + ' · <b>' + counts.work + '</b> working' + (counts.leave ? ' · ' + counts.leave + ' on leave' : '') + (counts.off ? ' · ' + counts.off + ' off' : '') + '</div>' +
+      '<div class="drd-list">' + rows + '</div></div>';
+  }
+  function essDeptRotaPick(iso) { _deptRotaDay = iso; loadDeptRota(); }
+
   async function loadDeptRota() {
     var el = document.getElementById('dept-rota-content');
     var subEl = document.getElementById('dept-rota-sub');
@@ -1269,7 +1441,8 @@
           '<td>' + escHtml(emp.full_name) + (emp.is_me ? ' (You)' : '') + '<div class="dept-rota-employee-sub">' + escHtml(emp.designation || '') + '</div></td>' +
           cells + '</tr>';
       }).join('');
-      el.innerHTML = '<div class="dept-rota-table-wrap"><table class="dept-rota-table"><thead><tr>' + headHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+      el.innerHTML = '<div class="dept-rota-table-wrap"><table class="dept-rota-table"><thead><tr>' + headHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>' +
+        _deptRotaDayView(employees, byEmpDate, dayDates, todayStr);
     } catch (e) {
       el.classList.remove('loading');
       el.innerHTML = '<div class="empty">Failed to load.</div>';
@@ -1344,7 +1517,7 @@
           return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
             '<div style="min-width:0;flex:1"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.title || 'Task') + (t.is_mine ? ' <span style="font-size:11px;color:var(--accent-text,#2563eb)">(you)</span>' : '') + '</div>' +
               '<div style="font-size:11.5px;color:var(--text3)">' + escHtml(t.assigned_to_name || t.assignee_name || 'Unassigned') +
-                (t.due_date ? ' · due ' + escHtml(t.due_date) + (overdue ? ' <b style="color:var(--red)">overdue</b>' : '') : '') +
+                (t.due_date ? ' · due ' + escHtml(fmtShortDate(t.due_date)) + (overdue ? ' <b style="color:var(--red)">overdue</b>' : '') : '') +
                 (t.priority ? ' · ' + escHtml(t.priority) : '') + '</div></div>' +
             '<span style="font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;color:' + s[1] + ';background:color-mix(in srgb,' + s[1] + ' 12%,transparent)">' + s[0] + '</span></div>';
         }).join('') + '</div>';
@@ -1819,12 +1992,15 @@
       if (note) note.textContent = data.cooloff_minutes ? 'The first ' + data.cooloff_minutes + ' min past your standard day are not counted as overtime' : 'Days you worked past your standard day (last 31 days)';
     } catch (e) { el.innerHTML = '<div class="empty">Failed to load.</div>'; return; }
     if (!_essOtElig.length) { el.innerHTML = emptyState('clock', 'No overtime detected', 'Days you work past your standard hours will appear here.'); return; }
-    el.innerHTML = '<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Status</th><th></th></tr></thead><tbody>' +
-      _essOtElig.map(function(r, i) {
+    var all = el.dataset.all === '1';
+    var list = all ? _essOtElig : _essOtElig.slice(0, 5);
+    el.innerHTML = '<div class="tbl-wrap m-stack" style="border:none"><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Status</th><th></th></tr></thead><tbody>' +
+      list.map(function(r, i) {
         var cls = !r.eligible ? 'rejected' : (r.eligibility.indexOf('Requested') === 0 ? 'approved' : 'pending');
         var act = r.eligible && !r.request_id ? '<button class="btn-ghost" style="padding:5px 10px;font-size:11.5px" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
-        return '<tr><td>' + escHtml(r.date) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + (r.break ? '<div class="m-muted" style="font-size:11px">after ' + escHtml(r.break) + ' break</div>' : '') + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+        return '<tr><td>' + escHtml(fmtShortDate(r.date)) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + (r.break ? '<div class="m-muted" style="font-size:11px">after ' + escHtml(r.break) + ' break</div>' : '') + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      (_essOtElig.length > 5 ? '<div class="att-more"><button type="button" class="btn-ghost" onclick="var c=document.getElementById(\'ot-elig-content\');c.dataset.all=c.dataset.all===\'1\'?\'\':\'1\';essLoadOtEligibility()">' + (all ? 'Show fewer' : 'Show all ' + _essOtElig.length + ' days') + '</button></div>' : '');
   }
   function essRequestOtFromRow(i) {
     var r = _essOtElig[i];
@@ -2227,7 +2403,9 @@
 
   function loadTeamTab() {
     loadTeamToday();
-    if (ESS_DEPARTMENT_SCOPE.length) loadDeptTeamView(); else document.getElementById('dept-team-card').style.display = 'none';
+    var ownDept = String((_essMe && (_essMe.employee || _essMe).department) || '').trim().toLowerCase();
+    var sameAsMine = ESS_DEPARTMENT_SCOPE.length === 1 && ESS_DEPARTMENT_SCOPE[0].trim().toLowerCase() === ownDept;
+    if (ESS_DEPARTMENT_SCOPE.length && !sameAsMine) loadDeptTeamView(); else document.getElementById('dept-team-card').style.display = 'none';
     if (ESS_PERMISSIONS.includes('hr:view_all_attendance')) { document.getElementById('gps-team-card').style.display = ''; loadTeamView(); }
     else document.getElementById('gps-team-card').style.display = 'none';
   }
@@ -2331,15 +2509,29 @@
       card.appendChild(box);
     }
     var todayStr = _todayISO();
-    var rows = _essHolidaysCache.filter(function(h) { return h.date >= todayStr; }).slice(0, 8);
-    if (!rows.length) { box.innerHTML = '<div class="hint" style="margin:0">No upcoming holidays.</div>'; return; }
-    box.innerHTML = '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">Upcoming holidays</div>' + rows.map(function(h) {
-      var dt = new Date(h.date + 'T00:00:00');
+    var upcoming = _essHolidaysCache.filter(function(h) { return h.date >= todayStr; }).sort(function(a, b) { return a.date < b.date ? -1 : 1; });
+    // Consecutive days of the same holiday (Eid, National Day...) become one line.
+    var groups = [];
+    upcoming.forEach(function(h) {
+      var g = groups[groups.length - 1];
+      if (g) {
+        var next = new Date(g.end + 'T00:00:00'); next.setDate(next.getDate() + 1);
+        var sameName = String(g.name).replace(/\s*\(.*\)$/, '').toLowerCase() === String(h.name).replace(/\s*\(.*\)$/, '').toLowerCase();
+        if (_isoDateLocal(next) === h.date && (sameName || /national day|commemoration/i.test(g.name + h.name))) { g.end = h.date; g.days++; if (!sameName && g.names.indexOf(h.name) < 0) g.names.push(h.name); return; }
+      }
+      groups.push({name: h.name, names: [h.name], start: h.date, end: h.date, days: 1, message: h.message});
+    });
+    groups = groups.slice(0, 6);
+    if (!groups.length) { box.innerHTML = '<div class="hint" style="margin:0">No upcoming holidays.</div>'; return; }
+    box.innerHTML = '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">Upcoming holidays</div>' + groups.map(function(g) {
+      var dt = new Date(g.start + 'T00:00:00'), de = new Date(g.end + 'T00:00:00');
+      var when = g.days === 1 ? dt.toLocaleDateString('en-GB', {weekday: 'long'})
+        : dt.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric'}) + ' – ' + de.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short'}) + ' · ' + g.days + ' days';
       return '<div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">' +
         '<div style="min-width:50px;text-align:center;border-radius:8px;background:#1e3a8a;color:#fff;padding:4px 0;line-height:1.15">' +
-          '<div style="font-size:15px;font-weight:700">' + dt.getDate() + '</div><div style="font-size:10.5px;opacity:.85">' + dt.toLocaleDateString('en-GB', {month: 'short'}) + '</div></div>' +
-        '<div style="min-width:0;flex:1"><div style="font-weight:600">' + escHtml(h.name) + ' <span style="font-weight:400;font-size:11.5px;color:var(--text3)">· ' + dt.toLocaleDateString('en-GB', {weekday: 'long'}) + '</span></div>' +
-          (h.message ? '<div style="font-size:12.5px;color:var(--text2);margin-top:2px">' + escHtml(h.message) + '</div>' : '') + '</div></div>';
+          '<div style="font-size:15px;font-weight:700">' + dt.getDate() + (g.days > 1 ? '<span style="font-size:11px;font-weight:600">–' + de.getDate() + '</span>' : '') + '</div><div style="font-size:10.5px;opacity:.85">' + dt.toLocaleDateString('en-GB', {month: 'short'}) + '</div></div>' +
+        '<div style="min-width:0;flex:1"><div style="font-weight:600">' + escHtml(g.names.join(' & ')) + '</div><div style="font-size:11.5px;color:var(--text3)">' + escHtml(when) + '</div>' +
+          (g.message ? '<div style="font-size:12.5px;color:var(--text2);margin-top:2px">' + escHtml(g.message) + '</div>' : '') + '</div></div>';
     }).join('');
   }
 
@@ -2846,8 +3038,11 @@
       btns.forEach(function(b) { if (b) b.disabled = false; });
     }
     var err = document.getElementById('gps-err');
+    var quiet = err && err.dataset.quiet === '1';
+    if (err) delete err.dataset.quiet;
     await _mLoadCheck();
     _mLoadToday();
+    if (quiet) return;
     if (err && err.style.display === 'block') essToast(err.textContent, 'err');
     else essToast(checked ? 'Checked out' : 'Checked in');
   }
