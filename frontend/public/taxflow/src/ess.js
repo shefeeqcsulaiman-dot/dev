@@ -278,6 +278,7 @@
     btn.disabled = false;
   }
 
+  var _essOutsideWarned = false;
   function startGpsPingLoop() {
     if (gpsPingTimer) return;
     gpsPingTimer = setInterval(async function() {
@@ -288,7 +289,16 @@
           body: JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, device: navigator.userAgent.substring(0,120)})
         });
         var d = await r.json();
-        if (r.ok && d.auto_checked_out) { stopGpsPingLoop(); refreshGpsStatus(); }
+        if (r.ok && d.auto_checked_out) {
+          stopGpsPingLoop(); _essOutsideWarned = false; refreshGpsStatus();
+          if (typeof _mLoadCheck === 'function') { try { await _mLoadCheck(); _mLoadToday(); } catch (e2) {} }
+          var at = d.check_out ? new Date(d.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+          essConfirm({title: 'Checked out automatically', message: 'You left ' + (d.location_name || 'your work location') + (at ? ' at ' + at : '') +
+            ', so you were checked out. Check in again when you are back.', okText: 'OK', cancelText: ''});
+        } else if (r.ok && d.inside_geofence === false && !_essOutsideWarned) {
+          _essOutsideWarned = true;
+          essToast('You are outside ' + (d.location_name || 'your work location') + '. You will be checked out in ' + (d.grace_minutes || 5) + ' minutes unless you return.', 'err');
+        } else if (r.ok && d.inside_geofence) { _essOutsideWarned = false; }
       } catch(e) { /* transient GPS/network errors are not surfaced on every ping */ }
     }, 120000);
   }
@@ -529,7 +539,11 @@
       var nameEl = document.getElementById('dash-name');
       if (nameEl) nameEl.textContent = _essGreeting() + ', ' + (emp.full_name || '').split(' ')[0];
       var sbCo = document.getElementById('ess-sb-company');
-      if (sbCo && emp.company_name) sbCo.textContent = emp.company_name;
+      var sbBrand = document.querySelector('.ess-sb-brand');
+      // The company's own name as the sidebar title, "Employee Portal" under it.
+      if (sbBrand && emp.company_name) { sbBrand.textContent = emp.company_name; sbBrand.title = emp.company_name; if (sbCo) sbCo.textContent = 'Employee Portal'; }
+      else if (sbCo && emp.company_name) sbCo.textContent = emp.company_name;
+      _essShowCompanyLogo(emp);
       var roleEl = document.getElementById('dash-role');
       if (roleEl) roleEl.textContent = (emp.designation || '') + (emp.designation && emp.department ? ' · ' : '') + (emp.department || '');
       var companyEl = document.getElementById('dash-hero-company');
@@ -754,6 +768,33 @@
     } catch(e) { document.getElementById('att-body').innerHTML = '<tr><td colspan="6" class="empty">Failed to load.</td></tr>'; }
   }
 
+  // ── Company logo (GET /companies/{id}/logo, public and cached by version) ──
+  function _essLogoUrl(emp) {
+    return emp && emp.company_id && emp.company_logo_version
+      ? apiBase() + '/companies/' + encodeURIComponent(emp.company_id) + '/logo?v=' + encodeURIComponent(emp.company_logo_version) : '';
+  }
+  function _essShowCompanyLogo(emp) {
+    var url = _essLogoUrl(emp);
+    // Desktop sidebar: the logo replaces the generic icon.
+    var icon = document.querySelector('.ess-sb-logo-icon');
+    if (icon) {
+      if (url) {
+        icon.classList.add('has-logo');
+        icon.innerHTML = '<img src="' + escHtml(url) + '" alt="' + escHtml(emp.company_name || 'Company') + '">';
+        var img = icon.querySelector('img');
+        img.onerror = function() { icon.classList.remove('has-logo'); img.remove(); };
+      }
+    }
+    // Phones: logo and company name above the greeting.
+    var box = document.getElementById('m-company');
+    if (box) {
+      var mi = document.getElementById('m-company-logo');
+      document.getElementById('m-company-name').textContent = emp.company_name || '';
+      if (url) { mi.src = url; mi.hidden = false; mi.onerror = function() { mi.hidden = true; }; } else mi.hidden = true;
+      box.hidden = !(url || emp.company_name);
+    }
+  }
+
   function _psPeriodLabel(period) {
     if (/^\d{4}-\d{2}$/.test(period || '')) return new Date(period + '-01T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
     return period || '—';
@@ -799,6 +840,7 @@
       '.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:13px;margin-bottom:24px}.meta b{color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;display:block}' +
       'table{width:100%;border-collapse:collapse;font-size:14px}td{padding:9px 4px;border-bottom:1px solid #e2e8f0}td.n{text-align:right}tr.b td{font-weight:700;font-size:16px;border-top:2px solid #0f172a;border-bottom:none}tr.g td{font-weight:600;background:#f8fafc}' +
       '.foot{margin-top:32px;font-size:11px;color:#94a3b8}</style></head><body>' +
+      (_essLogoUrl(me) ? '<img src="' + escHtml(_essLogoUrl(me)) + '" alt="" style="max-height:56px;max-width:220px;object-fit:contain;display:block;margin-bottom:10px">' : '') +
       '<h1>' + escHtml(me.company_name || 'Payslip') + '</h1><h2>Payslip — ' + escHtml(_psPeriodLabel(p.period)) + (status ? ' (' + escHtml(status) + ')' : '') + '</h2>' +
       '<div class="meta"><div><b>Employee</b>' + escHtml(me.full_name || '') + '</div><div><b>Employee ID</b>' + escHtml(me.employee_no || '') + '</div>' +
       '<div><b>Department</b>' + escHtml(me.department || '') + '</div><div><b>Designation</b>' + escHtml(me.designation || '') + '</div></div>' +
@@ -1865,6 +1907,7 @@
     ok.textContent = opts.okText || 'OK';
     var cancel = document.getElementById('ess-confirm-cancel');
     cancel.textContent = opts.cancelText || 'Cancel';
+    cancel.hidden = opts.cancelText === '';   // '' = a notice with only OK
     overlay.classList.add('on');
     return new Promise(function(resolve) {
       function done(value) {

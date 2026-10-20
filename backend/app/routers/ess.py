@@ -12,6 +12,7 @@ from fastapi.responses import Response
 import jwt
 from jwt import PyJWTError as JWTError
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.cache as cache
@@ -74,6 +75,10 @@ class EssEmployeeOut(BaseModel):
     status: str
     photo: str | None = None
     company_name: str | None = None
+    # The company's logo, served by GET /companies/{company_id}/logo?v={logo_version}
+    # (public, cached). logo_version is None when the company has no logo.
+    company_id: str | None = None
+    company_logo_version: str | None = None
     # ISO currency code of the employee's company (Company.currency) -- the
     # payslip / net-pay figures were formatted with a hardcoded "AED" prefix
     # regardless of which country/currency the company actually runs in.
@@ -210,7 +215,11 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
 @router.get("/me", response_model=EssEmployeeOut)
 def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
     emp = ess_bearer(request, db)
-    company_name, currency = db.query(Company.name, Company.currency).filter(Company.id == emp.company_id).one()
+    # Only the logo's length and a slice of it: enough to change when the logo does, without
+    # reading the whole image from the database on every ESS page load.
+    company_name, currency, logo_len, logo_part = db.query(
+        Company.name, Company.currency, func.length(Company.logo), func.substr(Company.logo, 60, 400),
+    ).filter(Company.id == emp.company_id).one()
     start_time_str, _grace_minutes = _late_rules(db, emp.company_id)
     standard_hours = _standard_hours_per_day(db, emp.company_id)
     start_h, start_m = (int(part) for part in start_time_str.split(":"))
@@ -224,6 +233,8 @@ def ess_me(request: Request, db: Session = Depends(get_db)) -> EssEmployeeOut:
         status=emp.status,
         photo=emp.photo,
         company_name=company_name,
+        company_id=emp.company_id,
+        company_logo_version=hashlib.sha256(f"{logo_len}:{logo_part}".encode()).hexdigest()[:12] if logo_len else None,
         currency=currency,
         shift_start=start_time_str,
         shift_end=shift_end,

@@ -107,3 +107,41 @@ def test_ess_me_photo_is_null_when_none_saved(client, auth_headers, db):
     me = client.get("/api/v1/ess/me", headers=ess_headers)
     assert me.status_code == 200, me.text
     assert me.json()["photo"] is None
+
+
+def test_ess_me_returns_company_logo(client, auth_headers, db):
+    """ESS shows the company's logo (sidebar, phone header, payslip print): /ess/me gives the
+    company id and a logo version that changes with the logo, for GET /companies/{id}/logo."""
+    from app.models import Company
+
+    company_id = _company_id(client, auth_headers)
+    r = _save_employee_record(client, auth_headers, id="LOGO-001", name="Logo ESS Test")
+    assert r.status_code == 200, r.text
+    emp = db.query(Employee).filter(Employee.company_id == company_id, Employee.employee_no == "LOGO-001").one()
+    grant = client.put(f"/api/v1/hr/admin/employees/{emp.id}/portal-access", headers=auth_headers,
+                       json={"username": "ess.logo.test", "password": "esslogo123", "is_active": True})
+    assert grant.status_code == 200, grant.text
+    login = client.post("/api/v1/ess/login", json={"username": "ess.logo.test", "password": "esslogo123"})
+    ess_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    company = db.get(Company, company_id)
+    original = company.logo
+    try:
+        company.logo = None
+        db.commit()
+        me = client.get("/api/v1/ess/me", headers=ess_headers).json()
+        assert me["company_id"] == company_id and me["company_logo_version"] is None
+
+        company.logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        db.commit()
+        first = client.get("/api/v1/ess/me", headers=ess_headers).json()["company_logo_version"]
+        assert first
+        logo = client.get(f"/api/v1/companies/{company_id}/logo?v={first}")
+        assert logo.status_code == 200 and logo.headers["content-type"].startswith("image/png")
+
+        company.logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        db.commit()
+        assert client.get("/api/v1/ess/me", headers=ess_headers).json()["company_logo_version"] != first
+    finally:
+        company.logo = original
+        db.commit()

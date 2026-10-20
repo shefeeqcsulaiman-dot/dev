@@ -176,6 +176,8 @@
     .ess-sb{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;flex-shrink:0}
     .ess-sb-logo{padding:18px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
     .ess-sb-logo-icon{width:34px;height:34px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .ess-sb-logo-icon.has-logo{background:#fff!important;padding:3px;overflow:hidden}
+    .ess-sb-logo-icon.has-logo img{width:100%;height:100%;object-fit:contain}
     .ess-sb-brand{font-family:'DM Sans',sans-serif;font-size:16.5px;font-weight:700;color:var(--text);letter-spacing:-.3px}
     .ess-sb-brand span{color:var(--accent-text)}
     .ess-sb-tagline{font-size:10px;color:var(--text3);letter-spacing:.4px;margin-top:1px}
@@ -617,6 +619,7 @@
     .ess-sb-logo{padding:16px 18px 14px;border-bottom:1px solid var(--sb-border)}
     .ess-sb-logo-icon{width:40px;height:40px;border-radius:11px;background:#2563eb}
     .ess-sb-brand{font-family:'DM Sans',sans-serif;font-size:19px;font-weight:700;letter-spacing:-.5px;color:var(--text);line-height:1.2}
+    .ess-sb-brand{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
     .ess-sb-brand span{color:var(--accent)}
     .ess-sb-tagline{font-size:11.5px;font-weight:600;color:var(--text3);letter-spacing:0;margin-top:1px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .ess-sb-section{padding:6px 10px 6px}
@@ -908,6 +911,11 @@
   .m-section{font-size:12px;color:var(--text2);margin:14px 2px 8px}
   .m-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:12px 14px}
   .m-home,.m-att,.m-me{margin-bottom:16px}
+  .m-company{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:12.5px;font-weight:600;color:var(--text2);min-width:0}
+  .m-company[hidden]{display:none}
+  .m-company img{height:28px;max-width:96px;object-fit:contain;border-radius:6px;background:#fff;padding:2px 4px}
+  .m-company img[hidden]{display:none}
+  .m-company span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .m-hello{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .m-hello-text{flex:1;min-width:0}
   .m-name{font-size:17px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

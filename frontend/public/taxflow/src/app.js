@@ -2637,13 +2637,72 @@ async function loadCompanyLocations(){
     if(r.status===401||r.status===403){_hrGpsNoAccess(tbody,5);return;}
     const rows=await r.json();
     HR_LOCATIONS_CACHE=rows;
-    tbody.innerHTML=rows.length?rows.map(l=>`<tr>
-      <td>${escapeHtml(l.location_name)}</td><td>${Number(l.latitude).toFixed(6)}, ${Number(l.longitude).toFixed(6)}</td>
-      <td>${Number(l.allowed_radius_meters)||0}m</td><td>${escapeHtml(l.status)}</td>
-      <td><button class="btn btn-g btn-sm" onclick="deleteCompanyLocation('${l.id}')">Delete</button></td>
-    </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No locations yet.</td></tr>';
+    renderCompanyLocationRows();
     populateAssignLocationSelect();
   }catch(e){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+}
+
+// Company Locations rows: view, or the inline edit form for HR_LOC_EDITING.
+let HR_LOC_EDITING=null;
+let HR_LOC_ASSIGNED={};   // location id -> employees assigned (from the assignments list)
+function renderCompanyLocationRows(){
+  const tbody=document.getElementById('hr-loc-tbody');
+  if(!tbody)return;
+  const rows=HR_LOCATIONS_CACHE;
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No locations yet. Add one above &mdash; tap <b>Use my current location</b> while standing at the site.</td></tr>';return;}
+  tbody.innerHTML=rows.map(l=>{
+    const id=escapeHtml(l.id), active=String(l.status||'active').toLowerCase()==='active';
+    const n=HR_LOC_ASSIGNED[l.id]||0;
+    const map=`https://www.google.com/maps?q=${Number(l.latitude)},${Number(l.longitude)}`;
+    if(HR_LOC_EDITING===l.id)return `<tr class="hr-loc-edit">
+      <td colspan="5"><div class="flx" style="gap:6px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="hr-le-name" value="${escapeHtml(l.location_name)}" placeholder="Location name" style="max-width:160px">
+        <input type="text" id="hr-le-lat" value="${Number(l.latitude).toFixed(6)}" placeholder="Latitude" style="max-width:110px" oninput="splitPastedCoordinates(this,'hr-le-lng')">
+        <input type="text" id="hr-le-lng" value="${Number(l.longitude).toFixed(6)}" placeholder="Longitude" style="max-width:110px">
+        <button type="button" class="btn btn-g btn-sm" onclick="useCurrentLocationForCompanyLocation(this,'hr-le-lat','hr-le-lng')">Use my current location</button>
+        <input type="number" id="hr-le-radius" value="${Number(l.allowed_radius_meters)||200}" min="20" max="5000" style="max-width:90px" title="Radius in metres (20 to 5000)">
+        <span style="font-size:12px;color:var(--text3)">m</span>
+        <select id="hr-le-status" style="max-width:110px"><option value="active"${active?' selected':''}>Active</option><option value="inactive"${active?'':' selected'}>Inactive</option></select>
+        <button class="btn btn-p btn-sm" onclick="saveCompanyLocation('${id}')">Save</button>
+        <button class="btn btn-g btn-sm" onclick="HR_LOC_EDITING=null;renderCompanyLocationRows()">Cancel</button>
+      </div><div style="font-size:11.5px;color:var(--text3);margin-top:6px">Changing the position or radius applies to the next check-in and to everyone checked in there now.</div></td></tr>`;
+    return `<tr${active?'':' style="opacity:.6"'}>
+      <td><b>${escapeHtml(l.location_name)}</b><div style="font-size:11.5px;color:var(--text3)">${n} employee${n===1?'':'s'} assigned</div></td>
+      <td><a href="${map}" target="_blank" rel="noopener" title="Open in Google Maps">${Number(l.latitude).toFixed(6)}, ${Number(l.longitude).toFixed(6)}</a></td>
+      <td>${Number(l.allowed_radius_meters)||0}m</td>
+      <td>${active?'<span class="b b-g">Active</span>':'<span class="b">Inactive</span>'}</td>
+      <td style="white-space:nowrap"><button class="btn btn-g btn-sm" onclick="HR_LOC_EDITING='${id}';renderCompanyLocationRows()">Edit</button>
+        <button class="btn btn-g btn-sm" onclick="setCompanyLocationStatus('${id}',${active?"'inactive'":"'active'"})">${active?'Deactivate':'Activate'}</button>
+        <button class="btn btn-g btn-sm" style="color:var(--red)" onclick="deleteCompanyLocation('${id}')">Delete</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function _putCompanyLocation(loc,changes){
+  const body={location_name:loc.location_name,latitude:Number(loc.latitude),longitude:Number(loc.longitude),
+    allowed_radius_meters:Number(loc.allowed_radius_meters)||200,status:loc.status||'active',...changes};
+  const r=await fetch(`${apiBaseUrl()}/hr/company-locations/${encodeURIComponent(loc.id)}`,{method:'PUT',headers:hrAccessHeaders(),body:JSON.stringify(body)});
+  if(r.ok)return true;
+  const d=await r.json().catch(()=>({}));
+  toast(Array.isArray(d.detail)?d.detail.map(x=>String(x.msg||'').replace(/^Value error,\s*/,'')).join(' '):(d.detail||'Could not save the location'),'err');
+  return false;
+}
+async function saveCompanyLocation(id){
+  const loc=HR_LOCATIONS_CACHE.find(l=>l.id===id);if(!loc)return;
+  const name=(document.getElementById('hr-le-name').value||'').trim();
+  const lat=parseFloat(document.getElementById('hr-le-lat').value), lng=parseFloat(document.getElementById('hr-le-lng').value);
+  const radius=parseInt(document.getElementById('hr-le-radius').value,10);
+  if(!name){toast('Enter a location name','warn');return;}
+  if(Number.isNaN(lat)||Number.isNaN(lng)||Math.abs(lat)>90||Math.abs(lng)>180){toast('Enter valid coordinates','warn');return;}
+  if(!(radius>=20&&radius<=5000)){toast('The radius must be between 20 and 5000 metres','warn');return;}
+  if(await _putCompanyLocation(loc,{location_name:name,latitude:lat,longitude:lng,allowed_radius_meters:radius,status:document.getElementById('hr-le-status').value})){
+    HR_LOC_EDITING=null;toast('Location updated','ok');loadCompanyLocations();loadEmployeeLocationAssignments();
+  }
+}
+async function setCompanyLocationStatus(id,status){
+  const loc=HR_LOCATIONS_CACHE.find(l=>l.id===id);if(!loc)return;
+  if(status==='inactive'&&!(await appConfirm({title:'Deactivate location',message:`Employees can no longer check in at "${loc.location_name}" while it is inactive. Nothing else changes, and you can activate it again at any time.`,okText:'Deactivate'})))return;
+  if(await _putCompanyLocation(loc,{status})){toast(status==='active'?'Location activated':'Location deactivated','ok');loadCompanyLocations();}
 }
 
 function populateAssignLocationSelect(){
@@ -2674,6 +2733,9 @@ async function loadEmployeeLocationAssignments(){
     const r=await fetch(`${apiBaseUrl()}/hr/employee-locations`,{headers:hrAccessHeaders()});
     if(r.status===401||r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Your role does not have access to manage assignments.</td></tr>';return;}
     const rows=await r.json();
+    HR_LOC_ASSIGNED={};
+    rows.forEach(a=>{HR_LOC_ASSIGNED[a.location_id]=(HR_LOC_ASSIGNED[a.location_id]||0)+1;});
+    renderCompanyLocationRows();
     tbody.innerHTML=rows.length?rows.map(a=>`<tr>
       <td>${escapeHtml(a.employee_name)}</td><td>${escapeHtml(a.location_name)}</td>
       <td>${a.is_primary?'<span class="b b-g">Primary</span>':''}</td>
@@ -2703,7 +2765,7 @@ async function unassignEmployeeLocation(linkId){
 }
 
 // Company Locations: fill latitude/longitude from this device's GPS (stand at the site).
-function useCurrentLocationForCompanyLocation(btn){
+function useCurrentLocationForCompanyLocation(btn,latId='hr-loc-lat',lngId='hr-loc-lng'){
   if(!navigator.geolocation){toast('This browser cannot read your location','warn');return;}
   const label=btn.innerHTML;
   btn.disabled=true;btn.textContent='Finding your location…';
@@ -2711,8 +2773,8 @@ function useCurrentLocationForCompanyLocation(btn){
   navigator.geolocation.getCurrentPosition(pos=>{
     done();
     const {latitude,longitude,accuracy}=pos.coords;
-    document.getElementById('hr-loc-lat').value=latitude.toFixed(6);
-    document.getElementById('hr-loc-lng').value=longitude.toFixed(6);
+    document.getElementById(latId).value=latitude.toFixed(6);
+    document.getElementById(lngId).value=longitude.toFixed(6);
     const acc=Math.round(accuracy||0);
     // A laptop without GPS often places itself by Wi-Fi or IP, hundreds of metres off.
     if(acc>100)toast(`Location filled, but it is only accurate to about ±${acc} m. Use a phone at the site, or check it on a map.`,'warn');
@@ -2729,13 +2791,13 @@ function useCurrentLocationForCompanyLocation(btn){
 }
 
 // Pasting "25.2048, 55.2708" or a Google Maps link into Latitude fills both boxes.
-function splitPastedCoordinates(el){
+function splitPastedCoordinates(el,lngId='hr-loc-lng'){
   const v=el.value||'';
   const m=v.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/)||v.match(/[?&](?:q|query|ll)=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/)
     ||v.match(/^\s*(-?\d{1,2}\.\d+)\s*[,\s]\s*(-?\d{1,3}\.\d+)\s*$/);
   if(!m)return;
   el.value=Number(m[1]).toFixed(6);
-  document.getElementById('hr-loc-lng').value=Number(m[2]).toFixed(6);
+  document.getElementById(lngId).value=Number(m[2]).toFixed(6);
 }
 
 async function addCompanyLocation(){
@@ -2745,6 +2807,7 @@ async function addCompanyLocation(){
   const radius=parseInt(document.getElementById('hr-loc-radius')?.value||'200',10);
   if(!name||Number.isNaN(lat)||Number.isNaN(lng)){toast('Enter a name and valid coordinates','warn');return;}
   if(Math.abs(lat)>90||Math.abs(lng)>180){toast('Latitude must be between -90 and 90, longitude between -180 and 180','warn');return;}
+  if(!(radius>=20&&radius<=5000)){toast('The radius must be between 20 and 5000 metres','warn');return;}
   try{
     const r=await fetch(`${apiBaseUrl()}/hr/company-locations`,{method:'POST',headers:hrAccessHeaders(),
       body:JSON.stringify({location_name:name,latitude:lat,longitude:lng,allowed_radius_meters:radius})});
@@ -2759,10 +2822,17 @@ async function addCompanyLocation(){
 }
 
 async function deleteCompanyLocation(id){
-  if(!(await appConfirm({title:'Delete Location',message:'Delete this company location?',okText:'Delete'})))return;
+  const loc=HR_LOCATIONS_CACHE.find(l=>l.id===id)||{location_name:'this location'};
+  const n=HR_LOC_ASSIGNED[id]||0;
+  const msg=`Delete "${loc.location_name}"?`+(n?` ${n} employee${n===1?' is':'s are'} assigned to it and will be unassigned.`:'')+
+    ' Anyone checked in there now is checked out. Past attendance is kept. To pause check-ins instead, use Deactivate.';
+  if(!(await appConfirm({title:'Delete Location',message:msg,okText:'Delete'})))return;
   try{
-    await fetch(`${apiBaseUrl()}/hr/company-locations/${id}`,{method:'DELETE',headers:hrAccessHeaders()});
-    loadCompanyLocations();
+    const r=await fetch(`${apiBaseUrl()}/hr/company-locations/${encodeURIComponent(id)}`,{method:'DELETE',headers:hrAccessHeaders()});
+    if(!r.ok){const d=await r.json().catch(()=>({}));toast(d.detail||`Could not delete the location (HTTP ${r.status})`,'err');return;}
+    if(HR_LOC_EDITING===id)HR_LOC_EDITING=null;
+    toast('Location deleted','ok');
+    loadCompanyLocations();loadEmployeeLocationAssignments();
   }catch(e){toast('Failed to delete','err');}
 }
 

@@ -58,6 +58,49 @@ _BACKUP_RETENTION_DAYS = 30
 _BACKUP_KEY_PREFIX = "platform-backups/"
 
 
+def _checkout_sessions_left_outside(db, now) -> int:
+    """Open GPS sessions whose latest pings were all outside the radius for the grace period
+    are closed at the moment the employee was first seen outside (same rule as the live
+    ping, hr_access._maybe_auto_checkout). Covers a phone that stopped sending after leaving."""
+    from app.models import AttendanceSession, CompanyLocation, Employee
+    from app.routers.hr_access import _AUTO_CHECKOUT_GRACE_MINUTES, _maybe_auto_checkout, _record_gps_punch
+
+    from sqlalchemy import and_, func
+
+    closed = 0
+    cutoff = now - timedelta(minutes=_AUTO_CHECKOUT_GRACE_MINUTES)
+    # Only sessions whose most recent ping was outside: one indexed query, not a scan of
+    # every open session's log.
+    last_ping = (
+        db.query(EmployeeLocationLog.session_id.label("session_id"), func.max(EmployeeLocationLog.created_at).label("at"))
+        .join(AttendanceSession, AttendanceSession.id == EmployeeLocationLog.session_id)
+        .filter(AttendanceSession.status == "open")
+        .group_by(EmployeeLocationLog.session_id)
+        .subquery()
+    )
+    sessions = (
+        db.query(AttendanceSession)
+        .join(last_ping, last_ping.c.session_id == AttendanceSession.id)
+        .join(EmployeeLocationLog, and_(EmployeeLocationLog.session_id == last_ping.c.session_id,
+                                        EmployeeLocationLog.created_at == last_ping.c.at))
+        .filter(AttendanceSession.status == "open", AttendanceSession.check_in < cutoff,
+                EmployeeLocationLog.inside_geofence.is_(False))
+        .all()
+    )
+    for session in sessions:
+        try:
+            if _maybe_auto_checkout(db, session):
+                emp = db.get(Employee, session.employee_id)
+                loc = db.get(CompanyLocation, session.location_id) if session.location_id else None
+                if emp:
+                    _record_gps_punch(db, emp, session.check_out, "out", loc.location_name if loc else None)
+                closed += 1
+        except Exception:
+            db.rollback()
+            logger.exception("Geofence check-out failed for session %s", session.id)
+    return closed
+
+
 @celery_app.task(name="hr.auto_checkout_stale_sessions")
 def auto_checkout_stale_sessions() -> int:
     """Closes GPS sessions with no ping for _STALE_SESSION_HOURS, so a forgotten check-out
@@ -70,6 +113,13 @@ def auto_checkout_stale_sessions() -> int:
     db = SessionLocal()
     try:
         now = datetime.now(UTC)
+        try:
+            left = _checkout_sessions_left_outside(db, now)
+            if left:
+                logger.info("Checked out %s GPS session(s) last seen outside their work location", left)
+        except Exception:
+            db.rollback()
+            logger.exception("Geofence check-out sweep failed")
         cutoff = now - timedelta(hours=_STALE_SESSION_HOURS)
         last_ping = (
             db.query(EmployeeLocationLog.session_id.label("session_id"), func.max(EmployeeLocationLog.created_at).label("at"))

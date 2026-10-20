@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 import jwt
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -1099,12 +1099,33 @@ class CompanyLocationOut(BaseModel):
 
 
 class CompanyLocationRequest(BaseModel):
-    location_name: str
+    location_name: str = Field(min_length=1, max_length=120)
     branch_id: str | None = None
-    address: str | None = None
-    latitude: float
-    longitude: float
-    allowed_radius_meters: int = 200
+    address: str | None = Field(default=None, max_length=400)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    # Under ~20 m a phone's own GPS error alone would refuse people standing inside.
+    allowed_radius_meters: int = Field(default=200, ge=20, le=5000)
+    # "active" / "inactive"; left out = unchanged on edit, active on create.
+    status: str | None = None
+
+    @field_validator("location_name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("Enter a location name")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def _status(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if v not in ("active", "inactive"):
+            raise ValueError("Status must be active or inactive")
+        return v
 
 
 def _location_out(loc: CompanyLocation) -> CompanyLocationOut:
@@ -1138,7 +1159,7 @@ def create_company_location(
     loc = CompanyLocation(
         company_id=principal.company_id, location_name=payload.location_name.strip(), branch_id=payload.branch_id,
         address=payload.address, latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
-        allowed_radius_meters=payload.allowed_radius_meters,
+        allowed_radius_meters=payload.allowed_radius_meters, status=payload.status or "active",
     )
     db.add(loc)
     db.commit()
@@ -1161,6 +1182,8 @@ def update_company_location(
     loc.latitude = Decimal(str(payload.latitude))
     loc.longitude = Decimal(str(payload.longitude))
     loc.allowed_radius_meters = payload.allowed_radius_meters
+    if payload.status:
+        loc.status = payload.status
     db.add(loc)
     db.commit()
     return _location_out(loc)
@@ -1172,10 +1195,36 @@ def delete_company_location(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_principal_permission("hr:manage_locations")),
 ) -> None:
+    """Deletes a location even when it is in use: employees assigned to it are unassigned
+    (their next assigned site becomes primary), anyone checked in there is checked out now,
+    and past check-ins keep their times but no longer point at it. Deleting it used to fail
+    on PostgreSQL with a foreign-key error once any employee had been assigned."""
     loc = db.query(CompanyLocation).filter(CompanyLocation.id == location_id, CompanyLocation.company_id == principal.company_id).first()
-    if loc:
-        db.delete(loc)
+    if not loc:
+        return
+    now = datetime.now(UTC)
+    for session in db.query(AttendanceSession).filter(AttendanceSession.location_id == loc.id, AttendanceSession.status == "open").all():
+        session.check_out = now
+        session.status = "closed"
+        session.auto_checkout = True
+        emp = db.get(Employee, session.employee_id)
         db.commit()
+        if emp:
+            _record_gps_punch(db, emp, now, "out", loc.location_name)
+    db.query(AttendanceSession).filter(AttendanceSession.location_id == loc.id).update({"location_id": None}, synchronize_session=False)
+    affected = [eid for (eid,) in db.query(EmployeeLocation.employee_id).filter(EmployeeLocation.location_id == loc.id)]
+    db.query(EmployeeLocation).filter(EmployeeLocation.location_id == loc.id).delete(synchronize_session=False)
+    for emp in db.query(Employee).filter(Employee.company_id == principal.company_id,
+                                         (Employee.work_location_id == loc.id) | (Employee.id.in_(affected or ["-"]))).all():
+        remaining = (
+            db.query(EmployeeLocation).filter(EmployeeLocation.employee_id == emp.id)
+            .order_by(EmployeeLocation.is_primary.desc()).first()
+        )
+        if remaining and not remaining.is_primary:
+            remaining.is_primary = True
+        emp.work_location_id = remaining.location_id if remaining else None
+    db.delete(loc)
+    db.commit()
 
 
 class EmployeeLocationAssignRequest(BaseModel):
@@ -1412,7 +1461,13 @@ def ping_location(
         if auto_closed:
             _record_gps_punch(db, emp, session.check_out, "out", loc.location_name if loc else None)
 
-    return {"inside_geofence": inside, "distance_meters": distance, "auto_checked_out": auto_closed}
+    return {
+        "inside_geofence": inside, "distance_meters": distance, "auto_checked_out": auto_closed,
+        "location_name": loc.location_name if loc else None,
+        "allowed_radius_meters": loc.allowed_radius_meters if loc else None,
+        "grace_minutes": _AUTO_CHECKOUT_GRACE_MINUTES,
+        "check_out": session.check_out.isoformat() if auto_closed and session.check_out else None,
+    }
 
 
 def _maybe_auto_checkout(db: Session, session: AttendanceSession) -> bool:
