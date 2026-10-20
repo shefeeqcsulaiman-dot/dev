@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth_principal import resolve_department_scope
@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import Principal, assert_company_active, get_current_principal, get_current_user
 from app.limiter import limiter
 from app.module_catalog import ALL_MODULES
+from app.outreach_forward import forward_trial
 from pydantic import BaseModel
 
 from app.models import Branch, Company, Role, TrialRequest, User
@@ -229,7 +230,8 @@ class TrialRequestIn(BaseModel):
 
 @router.post("/trial-request", status_code=201)
 @limiter.limit("30/hour")
-def trial_request(request: Request, payload: TrialRequestIn, db: Session = Depends(get_db)) -> dict:
+def trial_request(request: Request, payload: TrialRequestIn, background: BackgroundTasks,
+                  db: Session = Depends(get_db)) -> dict:
     record = TrialRequest(
         full_name=payload.full_name.strip(),
         company_name=payload.company_name.strip(),
@@ -242,4 +244,9 @@ def trial_request(request: Request, payload: TrialRequestIn, db: Session = Depen
     )
     db.add(record)
     db.commit()
+    background.add_task(forward_trial, {
+        "full_name": record.full_name, "company_name": record.company_name, "email": record.email,
+        "phone": record.phone, "employee_count": record.employee_count, "interest": record.interest,
+        "notes": record.notes,
+    }, "app.etaxflow.com trial request")
     return {"ok": True}
