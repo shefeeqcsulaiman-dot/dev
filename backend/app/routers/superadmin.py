@@ -155,7 +155,7 @@ def list_renewals(
     today = datetime.now(timezone.utc).date()
     companies = (
         db.query(Company)
-        .filter(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"))
+        .filter(_tenant_companies_filter())
         .all()
     )
     ids = [c.id for c in companies]
@@ -213,7 +213,7 @@ def extend_renewals(
     results = []
     for company in db.query(Company).filter(
         Company.id.in_(body.company_ids),
-        or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"),
+        _tenant_companies_filter(),
     ).all():
         left = _days_left(company.subscription_expires_at, today)
         base = today + timedelta(days=left) if left is not None and left > 0 else today
@@ -229,7 +229,8 @@ def extend_renewals(
 
 
 def _tenant_companies_filter():
-    return or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL")
+    # Companies in the recycle bin (deleted_at set) are left out of every list and count.
+    return and_(or_(Company.trn.is_(None), Company.trn != "SUPERADMIN-INTERNAL"), Company.deleted_at.is_(None))
 
 
 def _company_stats_subqueries():
@@ -990,12 +991,66 @@ def delete_company(
     if db.query(User).filter(User.company_id == company_id, User.role == "superadmin").count() > 0:
         raise HTTPException(status_code=400, detail="Cannot delete superadmin company")
 
-    cid = company_id
+    if company.deleted_at:
+        raise HTTPException(status_code=409, detail="This company is already in the recycle bin")
+
+    # Safety net 1: a full backup first. If it cannot be made, nothing is deleted.
+    try:
+        backup_key = backup_company_before_delete(db, company)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=f"Backup failed, so nothing was deleted: {exc}")
+
+    # Safety net 2: the recycle bin. The company is hidden from every list and its sign-ins
+    # are blocked (expiry set to yesterday); Restore undoes this, and the nightly purge
+    # (worker.purge_recycle_bin) deletes it for good after RECYCLE_BIN_DAYS.
+    now = datetime.now(timezone.utc)
+    company.deleted_prev_expiry = company.subscription_expires_at
+    company.subscription_expires_at = (now.date() - timedelta(days=1)).isoformat()
+    company.deleted_at = now
+    company.deleted_by = superadmin.email
+    company.deleted_backup_key = backup_key
+    purge_on = (now + timedelta(days=RECYCLE_BIN_DAYS)).date().isoformat()
+    _write_audit_blob(
+        db, superadmin.company_id, superadmin.email, "delete_company",
+        f"{company.name} ({company.id})", f"Moved to recycle bin; backup {backup_key}; purge on {purge_on}",
+    )
+    db.commit()
+    return {"ok": True, "backup_key": backup_key, "purge_on": purge_on}
+
+
+RECYCLE_BIN_DAYS = 7
+_DELETED_BACKUP_PREFIX = "deleted-company-backups/"
+
+
+def backup_company_before_delete(db: Session, company: Company, label: str = "Backup before delete") -> str:
+    """Writes the company's full SQL backup (gzip) to backup storage and returns its key.
+    Raises if it cannot: in production a backup that only lands on the server's own disk
+    (no S3/Spaces keys) is lost on the next deploy, so it does not count."""
+    import gzip
+    import tempfile
+
+    from app import storage
+    from app.routers.app_data import write_company_sql_dump
+
+    if storage.use_local_storage() and get_settings().app_env == "production":
+        raise RuntimeError("backup storage (S3/Spaces) is not configured")
+    key = f"{_DELETED_BACKUP_PREFIX}{company.id}/{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.sql.gz"
+    tmp = tempfile.NamedTemporaryFile(prefix="taxflow-predelete-", suffix=".sql.gz", delete=False)
+    try:
+        with tmp, gzip.GzipFile(fileobj=tmp, mode="wb") as gz:
+            write_company_sql_dump(db, company.id, label, gz)
+        storage.upload_backup_file(key, tmp.name, content_type="application/gzip")
+    finally:
+        os.unlink(tmp.name)
+    return key
+
+
+def purge_company(db: Session, company: Company) -> None:
+    """Permanently deletes a company and all its data (no commit). Only the recycle-bin purge
+    calls this, after a fresh backup."""
+    cid = company.id
     s = dict(synchronize_session=False)
-    # Logged against the superadmin's OWN company, not the one being deleted —
-    # this record would otherwise be wiped out along with the target company's
-    # AppDataRecord rows a few lines down, leaving no trace it ever happened.
-    _write_audit_blob(db, superadmin.company_id, superadmin.email, "delete_company", f"{company.name} ({cid})", "Deleted")
 
     # Tier 1 — leaf rows that FK into data tables (no direct company_id)
     inv_ids = db.query(Invoice.id).filter(Invoice.company_id == cid).subquery()
@@ -1131,6 +1186,42 @@ def delete_company(
     # Tier 7 — Users, then Company
     db.query(User).filter(User.company_id == cid).delete(**s)
     db.delete(company)
+
+
+@router.get("/recycle-bin")
+def recycle_bin(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """Companies deleted in the last RECYCLE_BIN_DAYS, newest first, with when each is purged."""
+    now = datetime.now(timezone.utc)
+    rows = db.query(Company).filter(Company.deleted_at.isnot(None)).order_by(Company.deleted_at.desc()).all()
+    out = []
+    for c in rows:
+        deleted_at = c.deleted_at if c.deleted_at.tzinfo else c.deleted_at.replace(tzinfo=timezone.utc)
+        purge_at = deleted_at + timedelta(days=RECYCLE_BIN_DAYS)
+        out.append({
+            "id": c.id, "name": c.name, "trn": c.trn,
+            "deleted_at": deleted_at.isoformat(), "deleted_by": c.deleted_by,
+            "backup_key": c.deleted_backup_key, "purge_on": purge_at.date().isoformat(),
+            "days_left": max(0, -int((now - purge_at).total_seconds() // 86400)),  # rounded up
+            "users": db.query(func.count(User.id)).filter(User.company_id == c.id).scalar() or 0,
+        })
+    return out
+
+
+@router.post("/companies/{company_id}/restore")
+@limiter.limit("20/minute")
+def restore_deleted_company(
+    request: Request,
+    company_id: str,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(_require_superadmin),
+):
+    """Takes a company out of the recycle bin: sign-ins work again with its old expiry date."""
+    company = db.query(Company).filter(Company.id == company_id, Company.deleted_at.isnot(None)).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found in the recycle bin")
+    company.subscription_expires_at = company.deleted_prev_expiry
+    company.deleted_at = company.deleted_by = company.deleted_backup_key = company.deleted_prev_expiry = None
+    _write_audit_blob(db, superadmin.company_id, superadmin.email, "restore_deleted_company", f"{company.name} ({company.id})", "Restored from recycle bin")
     db.commit()
     return {"ok": True}
 

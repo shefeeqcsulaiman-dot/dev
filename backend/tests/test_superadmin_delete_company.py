@@ -6,8 +6,13 @@ were added to the schema after this cascade was written and were never
 added to it. Deleting any company that had used HRMS GPS attendance,
 custom roles, or leave requests raised an uncaught FK IntegrityError,
 surfaced to the user as a generic "An internal error occurred" — found
-via a live report of exactly that error when deleting a real company."""
-from datetime import UTC, datetime
+via a live report of exactly that error when deleting a real company.
+
+Delete now moves the company to a 7-day recycle bin after a backup; the cascade runs
+when the nightly purge (worker.purge_recycle_bin) deletes it for good."""
+from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from app.models import (
     Account, AttendanceSession, Branch, Company, CompanyLocation, Employee,
@@ -39,6 +44,29 @@ def _make_superadmin(db):
 
 
 _login_client_ref = {}
+
+
+@pytest.fixture(autouse=True)
+def _backups_in_tmp(tmp_path, monkeypatch):
+    from app import storage
+    monkeypatch.setattr(storage, "LOCAL_STORAGE_ROOT", tmp_path / "storage")
+    return tmp_path / "storage"
+
+
+def _delete_and_purge(client, db, headers, company_id):
+    """Delete (to the recycle bin), then run the nightly purge as if 7 days had passed."""
+    from app import worker
+
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{company_id}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    company = db.get(Company, company_id)
+    assert company is not None and company.deleted_at is not None
+    company.deleted_at = datetime.now(UTC) - timedelta(days=8)
+    db.commit()
+    result = worker.purge_recycle_bin()
+    assert company_id in result["purged"], result
+    db.expunge_all()  # the purged rows are gone; keep the test's objects readable
 
 
 def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
@@ -95,15 +123,15 @@ def test_delete_company_with_hrms_gps_and_rbac_data(client, db):
     db.commit()
 
     headers = _make_superadmin(db)
-    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 200, r.text
+    tid = target.id
+    _delete_and_purge(client, db, headers, tid)
 
-    assert db.query(Company).filter(Company.id == target.id).first() is None
-    assert db.query(Employee).filter(Employee.company_id == target.id).count() == 0
-    assert db.query(Role).filter(Role.company_id == target.id).count() == 0
-    assert db.query(CompanyLocation).filter(CompanyLocation.company_id == target.id).count() == 0
-    assert db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == target.id).count() == 0
-    assert db.query(JournalEntry).filter(JournalEntry.company_id == target.id).count() == 0
+    assert db.query(Company).filter(Company.id == tid).first() is None
+    assert db.query(Employee).filter(Employee.company_id == tid).count() == 0
+    assert db.query(Role).filter(Role.company_id == tid).count() == 0
+    assert db.query(CompanyLocation).filter(CompanyLocation.company_id == tid).count() == 0
+    assert db.query(GeneralLedgerEntry).filter(GeneralLedgerEntry.company_id == tid).count() == 0
+    assert db.query(JournalEntry).filter(JournalEntry.company_id == tid).count() == 0
 
 
 def test_delete_company_previously_impersonated_as_branch(client, db):
@@ -131,10 +159,10 @@ def test_delete_company_previously_impersonated_as_branch(client, db):
     assert imp.status_code == 200, imp.text
     assert db.query(ImpersonationSession).filter(ImpersonationSession.company_id == target.id).count() == 1
 
-    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 200, r.text
-    assert db.query(Company).filter(Company.id == target.id).first() is None
-    assert db.query(ImpersonationSession).filter(ImpersonationSession.company_id == target.id).count() == 0
+    tid = target.id
+    _delete_and_purge(client, db, headers, tid)
+    assert db.query(Company).filter(Company.id == tid).first() is None
+    assert db.query(ImpersonationSession).filter(ImpersonationSession.company_id == tid).count() == 0
 
 
 def test_delete_company_rejects_wrong_password(client, db):
@@ -158,3 +186,115 @@ def test_delete_company_rejects_wrong_password(client, db):
     assert missing.status_code == 422, missing.text
 
     assert db.query(Company).filter(Company.id == target.id).first() is not None
+
+
+def _rows(payload):
+    return payload.get("items", payload.get("companies", [])) if isinstance(payload, dict) else payload
+
+
+def test_delete_moves_company_to_recycle_bin_with_backup(client, db, _backups_in_tmp):
+    """Delete backs the company up, blocks its sign-ins and hides it, but keeps every row;
+    Restore brings it back exactly as it was."""
+    _login_client_ref["client"] = client
+    target = Company(name="Recycle Target Co", trn="TARGET-RECYCLE", subscription_expires_at="2099-01-01")
+    db.add(target)
+    db.flush()
+    db.add(User(company_id=target.id, email="recycle-admin@example.com", full_name="Recycle Admin",
+                role="admin", password_hash=hash_password("Recycle-pass-1")))
+    db.add(Employee(company_id=target.id, employee_no="REC-001", full_name="Recycle Employee"))
+    db.commit()
+    login = {"email": "recycle-admin@example.com", "password": "Recycle-pass-1"}
+    token = client.post("/api/v1/auth/login", json=login).json()["access_token"]
+    staff = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/v1/auth/me", headers=staff).status_code == 200
+
+    headers = _make_superadmin(db)
+    assert any(c["id"] == target.id for c in _rows(client.get("/api/v1/superadmin/companies", headers=headers).json()))
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 200, r.text
+    key = r.json()["backup_key"]
+    assert key.startswith(f"deleted-company-backups/{target.id}/")
+    assert (_backups_in_tmp / key).stat().st_size > 0
+
+    db.expire_all()
+    company = db.get(Company, target.id)
+    assert company.deleted_at is not None and company.deleted_prev_expiry == "2099-01-01"
+    assert db.query(Employee).filter(Employee.company_id == target.id).count() == 1
+    # Sign-in and the existing session are both blocked.
+    assert client.post("/api/v1/auth/login", json=login).status_code != 200
+    assert client.get("/api/v1/auth/me", headers=staff).status_code != 200
+    # Hidden from the company list, shown in the recycle bin.
+    assert all(c["id"] != target.id for c in _rows(client.get("/api/v1/superadmin/companies", headers=headers).json()))
+    bin_rows = client.get("/api/v1/superadmin/recycle-bin", headers=headers).json()
+    row = next(c for c in bin_rows if c["id"] == target.id)
+    assert row["days_left"] in (6, 7) and row["backup_key"] == key
+    # Deleting it again is refused.
+    again = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
+    assert again.status_code == 409
+
+    # Restore puts it back with its old expiry; sign-in works again.
+    assert client.post(f"/api/v1/superadmin/companies/{target.id}/restore", headers=headers).status_code == 200
+    db.expire_all()
+    company = db.get(Company, target.id)
+    assert company.deleted_at is None and company.subscription_expires_at == "2099-01-01"
+    assert client.post("/api/v1/auth/login", json=login).status_code == 200
+    assert all(c["id"] != target.id for c in client.get("/api/v1/superadmin/recycle-bin", headers=headers).json())
+
+
+def test_delete_refused_when_backup_fails(client, db, monkeypatch):
+    """No backup, no delete: the company stays exactly as it was."""
+    from app import storage
+
+    _login_client_ref["client"] = client
+    target = Company(name="Backup Fail Co", trn="TARGET-BACKUP-FAIL", subscription_expires_at="2099-01-01")
+    db.add(target)
+    db.commit()
+    headers = _make_superadmin(db)
+
+    def broken(*a, **k):
+        raise OSError("bucket unreachable")
+    monkeypatch.setattr(storage, "upload_backup_file", broken)
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 503 and "nothing was deleted" in r.json()["detail"]
+    db.expire_all()
+    company = db.get(Company, target.id)
+    assert company.deleted_at is None and company.subscription_expires_at == "2099-01-01"
+
+
+def test_purge_keeps_company_when_final_backup_fails(client, db, monkeypatch):
+    from app import storage, worker
+
+    _login_client_ref["client"] = client
+    target = Company(name="Purge Keep Co", trn="TARGET-PURGE-KEEP")
+    db.add(target)
+    db.commit()
+    headers = _make_superadmin(db)
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    db.get(Company, target.id).deleted_at = datetime.now(UTC) - timedelta(days=8)
+    db.commit()
+
+    def broken(*a, **k):
+        raise OSError("bucket unreachable")
+    monkeypatch.setattr(storage, "upload_backup_file", broken)
+    result = worker.purge_recycle_bin()
+    assert target.id in result["kept"] and target.id not in result["purged"]
+    db.expire_all()
+    assert db.get(Company, target.id) is not None
+
+
+def test_purge_leaves_recently_deleted_companies(client, db):
+    from app import worker
+
+    _login_client_ref["client"] = client
+    target = Company(name="Purge Recent Co", trn="TARGET-PURGE-RECENT")
+    db.add(target)
+    db.commit()
+    headers = _make_superadmin(db)
+    r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
+    assert r.status_code == 200, r.text
+    result = worker.purge_recycle_bin()
+    assert target.id not in result["purged"]
+    db.expire_all()
+    assert db.get(Company, target.id) is not None

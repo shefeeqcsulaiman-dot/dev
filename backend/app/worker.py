@@ -46,6 +46,11 @@ celery_app.conf.beat_schedule = {
         "task": "backup.nightly_all_companies",
         "schedule": crontab(hour=2, minute=0),
     },
+    # After the nightly backup: permanently deletes companies 7 days in the recycle bin.
+    "purge-recycle-bin": {
+        "task": "companies.purge_recycle_bin",
+        "schedule": crontab(hour=3, minute=0),
+    },
 }
 
 _STALE_SESSION_HOURS = 16  # longer than any shift: the check-out was forgotten
@@ -228,6 +233,46 @@ def backup_company_batch(company_ids: list[str], date_str: str) -> dict:
         if failed:
             _platform_audit(db, "nightly_backup_failed", f"{date_str}: backup failed for {len(failed)} compan(ies): {', '.join(failed[:20])}")
         return {"done": done, "failed": failed}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="companies.purge_recycle_bin")
+def purge_recycle_bin() -> dict:
+    """Permanently deletes each company that has been in Super Admin's recycle bin for
+    RECYCLE_BIN_DAYS, taking one more backup just before. If that backup fails the company
+    is kept (and audited) and tried again the next night."""
+    from app.models import Company
+    from app.routers.superadmin import RECYCLE_BIN_DAYS, backup_company_before_delete, purge_company
+
+    db = SessionLocal()
+    purged, kept = [], []
+    try:
+        cutoff = datetime.now(UTC) - timedelta(days=RECYCLE_BIN_DAYS)
+        due = [cid for (cid,) in db.query(Company.id).filter(Company.deleted_at.isnot(None), Company.deleted_at <= cutoff)]
+        for company_id in due:
+            company = db.get(Company, company_id)
+            label = f"{company.name} ({company_id})"
+            try:
+                key = backup_company_before_delete(db, company, "Final backup before permanent delete")
+            except Exception as exc:
+                db.rollback()
+                kept.append(company_id)
+                logger.error("Recycle bin: final backup FAILED for %s, not deleted: %s", label, exc)
+                _platform_audit(db, "purge_company_skipped", f"{label}: final backup failed, kept in recycle bin ({exc})")
+                continue
+            try:
+                purge_company(db, company)
+                db.commit()
+                purged.append(company_id)
+                _platform_audit(db, "purge_company", f"{label}: permanently deleted after {RECYCLE_BIN_DAYS} days in recycle bin; final backup {key}")
+            except Exception as exc:
+                db.rollback()
+                kept.append(company_id)
+                logger.error("Recycle bin: purge FAILED for %s: %s", label, exc)
+                _platform_audit(db, "purge_company_failed", f"{label}: {exc}")
+            db.expunge_all()
+        return {"purged": purged, "kept": kept}
     finally:
         db.close()
 

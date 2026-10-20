@@ -1259,8 +1259,9 @@
           if (kind === 'holiday') return '<td><div class="dept-rota-cell is-holiday">Holiday</div></td>';
           var timeRange = (a.start && a.end) ? (a.start + '–' + a.end) : '';
           var taskCount = Array.isArray(a.tasks) ? a.tasks.length : 0;
-          return '<td><div class="dept-rota-cell"><div class="code">' + escHtml(a.code) + '</div>' +
-            (timeRange ? '<div class="time">' + escHtml(timeRange) + '</div>' : '') +
+          // The time first, then the shift name under it.
+          return '<td><div class="dept-rota-cell">' + (timeRange ? '<div class="time">' + escHtml(timeRange) + '</div>' : '') +
+            '<div class="code">' + escHtml(a.code) + '</div>' +
             (taskCount ? '<div class="task-count">' + taskCount + ' task' + (taskCount === 1 ? '' : 's') + '</div>' : '') +
             '</div></td>';
         }).join('');
@@ -1956,14 +1957,16 @@
     },
     task: {
       title: 'Request an Extra Task', path: '/ess/task-requests', ok: 'Task request sent to your manager',
+      sub: 'Your manager reviews it. Once approved, it appears on your Tasks page.',
+      icon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>',
       html: function(p) {
         var today = _todayISO();
+        var chip = function(v) { return '<button type="button" class="rq-chip' + (v === 'Medium' ? ' on' : '') + '" data-v="' + v + '" aria-pressed="' + (v === 'Medium') + '" onclick="essPickPriority(this)">' + v + '</button>'; };
         return '<div class="field"><label for="rq-task-title">What would you like to work on?</label><input id="rq-task-title" type="text" maxlength="160" placeholder="e.g. Help with the month-end stock count" value="' + escHtml(p.title || '') + '"></div>' +
-          '<div class="field"><label for="rq-task-desc">Details (optional)</label><textarea id="rq-task-desc" rows="3" maxlength="1000" placeholder="What you would do, and when you have time"></textarea></div>' +
-          '<div class="fr2"><div class="field"><label for="rq-task-pri">Priority</label><select id="rq-task-pri" class="ess-select"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
-          '<div class="field"><label for="rq-task-due">Preferred due date (optional)</label><input id="rq-task-due" type="date" min="' + today + '" max="' + _addDaysISO(today, 365) + '"></div></div>' +
-          '<div class="hint" style="margin:-6px 0 14px">Your manager reviews it. Once approved, it appears on your Tasks page.</div>' +
-          _RQ_REASON('Why you are asking', false);
+          '<div class="field"><label for="rq-task-desc">Details <span class="field-count" id="rq-task-count">Optional</span></label><textarea id="rq-task-desc" rows="3" maxlength="1000" placeholder="What you would do, and when you have time" oninput="essTaskCount(this)"></textarea></div>' +
+          '<div class="field"><label>Priority</label><div class="rq-chips" role="group" aria-label="Priority">' + ['Low', 'Medium', 'High'].map(chip).join('') + '</div><input type="hidden" id="rq-task-pri" value="Medium"></div>' +
+          '<div class="fr2"><div class="field"><label for="rq-task-due">Due by (optional)</label><input id="rq-task-due" type="date" min="' + today + '" max="' + _addDaysISO(today, 365) + '"></div>' +
+          '<div class="field"><label for="rq-reason">Why (optional)</label><input id="rq-reason" type="text" maxlength="500" placeholder="Short note"></div></div>';
       },
       collect: function() {
         var title = _rqVal('rq-task-title');
@@ -1991,11 +1994,22 @@
     }
   };
 
+  function essPickPriority(btn) {
+    btn.parentNode.querySelectorAll('.rq-chip').forEach(function(b) { b.classList.toggle('on', b === btn); b.setAttribute('aria-pressed', String(b === btn)); });
+    document.getElementById('rq-task-pri').value = btn.getAttribute('data-v');
+  }
+  function essTaskCount(el) {
+    var c = document.getElementById('rq-task-count');
+    if (c) c.textContent = el.value.length ? el.value.length + ' / 1000' : 'Optional';
+  }
   function essOpenRequestModal(kind, prefill) {
     var f = REQ_FORMS[kind];
     if (!f) return;
     _essReqKind = kind;
     document.getElementById('req-modal-title').textContent = f.title;
+    var sub = document.getElementById('req-modal-sub'), icon = document.getElementById('req-modal-icon');
+    if (sub) { sub.textContent = f.sub || ''; sub.hidden = !f.sub; }
+    if (icon) { icon.innerHTML = f.icon || ''; icon.hidden = !f.icon; }
     document.getElementById('req-form-body').innerHTML = f.html(prefill || {});
     document.getElementById('req-form-err').style.display = 'none';
     var btn = document.getElementById('req-submit-btn');

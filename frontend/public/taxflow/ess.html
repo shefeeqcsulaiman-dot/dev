@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <title>Employee Self-Service — ETaxFlow</title>
   <link rel="preload" href="/fonts/dmsans-rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/ess.css?v=9c352fcaab">
+  <link rel="stylesheet" href="src/ess.css?v=b7bf6dbb5c">
   <script>
     // Runs before body paints, so a saved/system dark preference applies
     // immediately instead of flashing light-then-dark once the main
@@ -758,10 +758,17 @@
 <!-- Generic request modal (overtime / loan / advance / attendance correction) -->
 <div class="ess-overlay" id="req-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="req-modal-title" onclick="if(event.target===this)essCloseRequestModal()">
   <div class="ess-modal">
-    <div class="ess-modal-title" id="req-modal-title">Request</div>
+    <div class="ess-modal-head">
+      <span class="ess-modal-icon" id="req-modal-icon" hidden></span>
+      <div style="flex:1;min-width:0">
+        <div class="ess-modal-title" id="req-modal-title">Request</div>
+        <div class="ess-modal-sub" id="req-modal-sub" hidden></div>
+      </div>
+      <button type="button" class="ess-modal-x" onclick="essCloseRequestModal()" aria-label="Close">&times;</button>
+    </div>
     <div id="req-form-err" class="err-box"></div>
     <div id="req-form-body"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+    <div class="ess-modal-foot">
       <button class="btn-ghost" onclick="essCloseRequestModal()">Cancel</button>
       <button id="req-submit-btn" class="btn-login" style="width:auto;padding:11px 22px" onclick="essSubmitRequest()">Submit Request</button>
     </div>
@@ -774,6 +781,6 @@
      order between them, so config.js still runs before ess.js. -->
 <script src="/config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/ess.js?v=26a9a60456" defer></script>
+<script src="src/ess.js?v=7fbf468eba" defer></script>
 </body>
 </html>

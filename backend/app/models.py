@@ -73,6 +73,13 @@ class Company(Base, TimestampMixin):
     departments: Mapped[str | None] = mapped_column(Text, nullable=True)
     branches: Mapped[str | None] = mapped_column(Text, nullable=True)
     modules_enabled: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Recycle bin: Super Admin "Delete" backs the company up and sets these instead of removing
+    # it. Sign-in is blocked (expiry set to yesterday); Restore puts deleted_prev_expiry back.
+    # The nightly purge (worker.py) deletes it for good 7 days after deleted_at.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    deleted_backup_key: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    deleted_prev_expiry: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="company")

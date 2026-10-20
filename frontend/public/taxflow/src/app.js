@@ -31117,3 +31117,121 @@ function attTrendHover(ev,wrap){
 function attTrendLeave(wrap){
   ['.att-tr-cursor','.att-tr-dot','.att-tr-tip'].forEach(q=>{const e=wrap.querySelector(q);if(e)e.style.display='none';});
 }
+
+// ── First-login tour ─────────────────────────────────────────────────────────
+// signup.html sets localStorage 'taxflow_tour_pending' when a new trial account is created;
+// the first time the main app then loads it walks through the main areas once (a spotlight
+// on each sidebar item / button, with Back / Next / Skip). startAppTour() runs it again.
+const _APP_TOUR_STEPS=[
+  {title:'Welcome to ETaxFlow',text:'Your 3-day free trial is active, with every module unlocked. This quick tour shows where things are — it takes under a minute.'},
+  {sel:'.nav[onclick="go(\'sales\')"]',title:'Sales',text:'Create VAT invoices, quotations and receipts. Every invoice posts to your accounts and VAT return automatically.'},
+  {sel:'.nav[onclick="go(\'purchase\')"]',title:'Purchases & expenses',text:'Record supplier bills and expenses. Upload a bill photo or PDF and AI fills in the details for you.'},
+  {sel:'.nav[onclick="go(\'reports\')"]',title:'Reports',text:'VAT return, profit & loss, balance sheet and more — always up to date with what you enter.'},
+  {sel:'#nav-hrms',title:'People & HR',text:'Employees, rota, attendance, leave and payroll. Your staff use the ESS app to check in and send requests.'},
+  {sel:'[data-module-gate="ai"][onclick="go(\'ai\')"]',title:'AI Assistant',text:'Ask questions about your business in plain words, or let it do routine work for you.'},
+  {sel:'.nav[onclick="go(\'settings\')"]',title:'Start here: your company',text:'Add your company details, TRN and logo so they appear on your invoices.',last:true},
+];
+let _appTour=null;
+function _appTourTarget(step){
+  if(!step.sel)return null;
+  const el=document.querySelector(step.sel);
+  if(!el)return null;
+  const r=el.getBoundingClientRect();
+  // off-canvas (the sidebar slid away on a narrow screen) counts as not visible
+  const onScreen=r.right>0&&r.bottom>0&&r.left<window.innerWidth&&r.top<window.innerHeight;
+  return r.width>0&&r.height>0&&onScreen&&getComputedStyle(el).visibility!=='hidden'?el:null;
+}
+function _appTourRender(){
+  if(!_appTour)return;
+  const {i,root}=_appTour, step=_APP_TOUR_STEPS[i], n=_APP_TOUR_STEPS.length;
+  const spot=root.querySelector('.tour-spot'), card=root.querySelector('.tour-card');
+  card.querySelector('.tour-step').textContent=`${i+1} of ${n}`;
+  card.querySelector('.tour-title').textContent=step.title;
+  card.querySelector('.tour-text').textContent=step.text;
+  card.querySelector('.tour-dots').innerHTML=_APP_TOUR_STEPS.map((_,k)=>`<span class="${k===i?'on':''}"></span>`).join('');
+  const back=card.querySelector('.tour-back'), next=card.querySelector('.tour-next'), skip=card.querySelector('.tour-skip');
+  back.style.visibility=i?'visible':'hidden';
+  next.textContent=step.last?'Set up my company':(i?'Next':'Start the tour');
+  skip.textContent=step.last?'Explore on my own':'Skip tour';
+  const el=_appTourTarget(step);
+  if(el)el.scrollIntoView({block:'nearest'});
+  const vw=window.innerWidth, vh=window.innerHeight, pad=6;
+  if(!el){
+    spot.classList.add('none');
+    root.classList.add('dim');
+    card.style.left=Math.max(16,(vw-card.offsetWidth)/2)+'px';
+    card.style.top=Math.max(16,(vh-card.offsetHeight)/2)+'px';
+    return;
+  }
+  root.classList.remove('dim');
+  spot.classList.remove('none');
+  const r=el.getBoundingClientRect();
+  Object.assign(spot.style,{left:(r.left-pad)+'px',top:(r.top-pad)+'px',width:(r.width+pad*2)+'px',height:(r.height+pad*2)+'px'});
+  const cw=card.offsetWidth, ch=card.offsetHeight, gap=14;
+  let left, top;
+  if(r.right+gap+cw<=vw-16){left=r.right+gap;top=r.top+r.height/2-ch/2;}           // right of it (sidebar items)
+  else if(r.bottom+gap+ch<=vh-16){left=r.left+r.width/2-cw/2;top=r.bottom+gap;}     // below it (topbar buttons)
+  else{left=r.left+r.width/2-cw/2;top=r.top-gap-ch;}                                // above it
+  card.style.left=Math.min(Math.max(16,left),vw-cw-16)+'px';
+  card.style.top=Math.min(Math.max(16,top),vh-ch-16)+'px';
+}
+function _appTourEnd(goSettings){
+  if(!_appTour)return;
+  _appTour.root.remove();
+  window.removeEventListener('resize',_appTour.onResize);
+  document.removeEventListener('keydown',_appTour.onKey,true);
+  _appTour=null;
+  try{localStorage.removeItem('taxflow_tour_pending');localStorage.setItem('taxflow_tour_done','1');}catch(e){}
+  if(goSettings)go('company');
+}
+function _appTourMove(d){
+  if(!_appTour)return;
+  const i=_appTour.i+d;
+  if(i<0)return;
+  if(i>=_APP_TOUR_STEPS.length){_appTourEnd(true);return;}
+  _appTour.i=i;
+  _appTourRender();
+}
+function startAppTour(){
+  if(_appTour||window.HRMS_STANDALONE)return;
+  if(document.body.classList.contains('sb-open'))toggleSidebar(false);
+  const root=document.createElement('div');
+  root.className='tour-root';
+  root.innerHTML=`<div class="tour-spot none"></div>
+    <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+      <div class="tour-head"><span class="tour-step"></span><button type="button" class="tour-x" aria-label="Close tour">&times;</button></div>
+      <div class="tour-title" id="tour-title"></div>
+      <div class="tour-text"></div>
+      <div class="tour-dots"></div>
+      <div class="tour-foot">
+        <button type="button" class="tour-skip"></button>
+        <span style="flex:1"></span>
+        <button type="button" class="btn btn-g tour-back">Back</button>
+        <button type="button" class="btn btn-p tour-next"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(root);
+  const onResize=()=>_appTourRender();
+  const onKey=e=>{
+    if(e.key==='Escape'){e.preventDefault();_appTourEnd(false);}
+    else if(e.key==='ArrowRight'){e.preventDefault();_appTourMove(1);}
+    else if(e.key==='ArrowLeft'){e.preventDefault();_appTourMove(-1);}
+  };
+  _appTour={i:0,root,onResize,onKey};
+  root.querySelector('.tour-x').onclick=()=>_appTourEnd(false);
+  root.querySelector('.tour-skip').onclick=()=>_appTourEnd(false);
+  root.querySelector('.tour-back').onclick=()=>_appTourMove(-1);
+  root.querySelector('.tour-next').onclick=()=>_appTourMove(1);
+  window.addEventListener('resize',onResize);
+  document.addEventListener('keydown',onKey,true);
+  _appTourRender();
+  root.querySelector('.tour-next').focus();
+}
+window.startAppTour=startAppTour;
+window.addEventListener('load',()=>{
+  if(window.HRMS_STANDALONE)return;
+  let pending=false;
+  try{pending=localStorage.getItem('taxflow_tour_pending')==='1'&&localStorage.getItem('taxflow_tour_done')!=='1';}catch(e){}
+  // after the dashboard and module gating have settled, so hidden modules are skipped
+  if(pending)setTimeout(startAppTour,1500);
+});

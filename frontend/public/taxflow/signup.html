@@ -439,6 +439,7 @@ async function requestTrial(){
       try{
         localStorage.setItem('taxflow_token',data.access_token);
         localStorage.setItem('taxflow_principal_kind','user');
+        localStorage.setItem('taxflow_tour_pending','1');  // app.js shows the first-login tour once
       }catch(e){}
       showSuccess({email:email,company:company,country:country});
       setTimeout(()=>window.location.replace('/'),1200);
