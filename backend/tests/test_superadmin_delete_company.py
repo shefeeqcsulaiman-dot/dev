@@ -58,7 +58,7 @@ def _delete_and_purge(client, db, headers, company_id):
     from app import worker
 
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{company_id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 202, r.text
     db.expire_all()
     company = db.get(Company, company_id)
     assert company is not None and company.deleted_at is not None
@@ -211,8 +211,12 @@ def test_delete_moves_company_to_recycle_bin_with_backup(client, db, _backups_in
     headers = _make_superadmin(db)
     assert any(c["id"] == target.id for c in _rows(client.get("/api/v1/superadmin/companies", headers=headers).json()))
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 200, r.text
-    key = r.json()["backup_key"]
+    assert r.status_code == 202, r.text
+    # TestClient runs the background backup before returning.
+    status = client.get(f"/api/v1/superadmin/companies/{target.id}/delete-status", headers=headers).json()
+    assert status["status"] == "done", status
+    db.expire_all()
+    key = db.get(Company, target.id).deleted_backup_key
     assert key.startswith(f"deleted-company-backups/{target.id}/")
     assert (_backups_in_tmp / key).stat().st_size > 0
 
@@ -255,7 +259,9 @@ def test_delete_refused_when_backup_fails(client, db, monkeypatch):
         raise OSError("bucket unreachable")
     monkeypatch.setattr(storage, "upload_backup_file", broken)
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 503 and "nothing was deleted" in r.json()["detail"]
+    assert r.status_code == 202, r.text
+    status = client.get(f"/api/v1/superadmin/companies/{target.id}/delete-status", headers=headers).json()
+    assert status["status"] == "failed" and "nothing was deleted" in status["detail"], status
     db.expire_all()
     company = db.get(Company, target.id)
     assert company.deleted_at is None and company.subscription_expires_at == "2099-01-01"
@@ -270,7 +276,7 @@ def test_purge_keeps_company_when_final_backup_fails(client, db, monkeypatch):
     db.commit()
     headers = _make_superadmin(db)
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 202, r.text
     db.expire_all()
     db.get(Company, target.id).deleted_at = datetime.now(UTC) - timedelta(days=8)
     db.commit()
@@ -293,7 +299,7 @@ def test_purge_leaves_recently_deleted_companies(client, db):
     db.commit()
     headers = _make_superadmin(db)
     r = client.request("DELETE", f"/api/v1/superadmin/companies/{target.id}", headers=headers, json={"password": "test12345"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 202, r.text
     result = worker.purge_recycle_bin()
     assert target.id not in result["purged"]
     db.expire_all()

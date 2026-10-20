@@ -2259,25 +2259,55 @@
       return;
     }
     const btn=document.getElementById('delete-co-btn');
-    btn.disabled=true; btn.textContent='Backing up and deleting…';
+    btn.disabled=true; btn.textContent='Checking…';
+    const name=(document.getElementById('delete-co-sub').textContent.match(/"(.*)"/)||[])[1]||'The company';
     try{
       // Server verifies this against the superadmin's real account
       // password_hash — the actual authorization check now lives in
       // backend/app/routers/superadmin.py's delete_company(), not here.
+      // The backup then runs in the background (a big company takes longer than the
+      // gateway waits), so this only starts it; _watchCompanyDelete() follows it.
       const res=await apiFetch(`/superadmin/companies/${companyId}`,{method:'DELETE',body:JSON.stringify({password})});
       if(!res.ok){
-        const d=await res.json();
-        errEl.textContent=d.detail||'Delete failed.';
+        errEl.textContent=await _saErrorText(res,'Delete failed.');
         errEl.style.display='block';
         document.getElementById('delete-co-pwd1').value='';
         return;
       }
-      const d=await res.json().catch(()=>({}));
       closeModal('m-delete-co');
-      loadDashboard();
-      _saConfirm('Moved to Recycle Bin','The company was backed up and moved to the Recycle Bin. Restore it there until '+(d.purge_on||'7 days from now')+'.',()=>saGo('recycle'),{okText:'Open Recycle Bin',okClass:'btn-p'});
+      _watchCompanyDelete(companyId,name);
     }catch(err){ errEl.textContent=err.message; errEl.style.display='block'; }
     finally{ btn.disabled=false; btn.textContent='Delete Company'; }
+  }
+
+  // A readable message from a failed response, also when the server or the gateway in
+  // front of it answered with an HTML error page instead of JSON.
+  async function _saErrorText(res,fallback){
+    const text=await res.text().catch(()=>'');
+    try{ const d=JSON.parse(text); if(d&&d.detail) return typeof d.detail==='string'?d.detail:JSON.stringify(d.detail); }catch(e){}
+    if(res.status===502||res.status===503||res.status===504) return 'The server took too long to answer (HTTP '+res.status+'). Please try again in a minute.';
+    return fallback+' (HTTP '+res.status+')';
+  }
+
+  // Follows a background delete: backup, then the Recycle Bin (GET .../delete-status).
+  async function _watchCompanyDelete(companyId,name){
+    _saConfirm('Backing up '+name,'Taking a full backup of "'+name+'" before it goes to the Recycle Bin. This can take a few minutes for a big company — you can keep working, and this updates when it is done.',()=>{},{okText:'OK',okClass:'btn-p'});
+    const started=Date.now();
+    while(Date.now()-started<20*60*1000){
+      await new Promise(r=>setTimeout(r,4000));
+      let st=null;
+      try{ const r=await apiFetch(`/superadmin/companies/${encodeURIComponent(companyId)}/delete-status`); if(r.ok) st=await r.json(); }catch(e){}
+      if(!st||st.status==='running'||st.status==='unknown') continue;
+      closeModal('m-sa-confirm');
+      loadDashboard();
+      if(st.status==='done'){
+        _saConfirm('Moved to Recycle Bin','"'+name+'" was backed up and moved to the Recycle Bin. You can restore it there for 7 days.',()=>saGo('recycle'),{okText:'Open Recycle Bin',okClass:'btn-p'});
+      }else{
+        _saConfirm('Not deleted',(st.detail||'The backup failed, so nothing was deleted.')+' The details are in the Audit Log.',()=>{},{okText:'OK',okClass:'btn-p'});
+      }
+      return;
+    }
+    _saConfirm('Still backing up','The backup of "'+name+'" is taking a long time. Check the Recycle Bin later; if it is not there, see the Audit Log.',()=>saGo('recycle'),{okText:'Open Recycle Bin',okClass:'btn-p'});
   }
 
   // ── Demo data (POST /superadmin/companies/{id}/demo-data, app/demo_data.py) ──

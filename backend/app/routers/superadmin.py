@@ -1,11 +1,12 @@
 import datetime as _dt
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import and_, case, func, or_, select, text
@@ -46,6 +47,8 @@ from app.security import (
     impersonator_id_from_token, revoke_impersonation_jti, user_id_from_token,
     verify_password,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 settings = get_settings()
@@ -974,15 +977,19 @@ def set_module_for_companies(
     return {"ok": True, "module": body.module, "enabled": body.enabled, "changed": changed, "unchanged": unchanged}
 
 
-@router.delete("/companies/{company_id}")
+@router.delete("/companies/{company_id}", status_code=202)
 @limiter.limit("20/minute")
 def delete_company(
     request: Request,
     company_id: str,
     payload: DeleteCompanyIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     superadmin: User = Depends(_require_superadmin),
 ):
+    """Checks the password, then backs the company up and moves it to the recycle bin in the
+    background: a big company's backup takes longer than the web gateway waits for a reply
+    (it answered with an HTML error page). Poll GET /companies/{id}/delete-status."""
     if not superadmin.password_hash or not verify_password(payload.password, superadmin.password_hash):
         raise HTTPException(status_code=403, detail="Incorrect password")
     company = db.query(Company).filter(Company.id == company_id).first()
@@ -993,30 +1000,81 @@ def delete_company(
 
     if company.deleted_at:
         raise HTTPException(status_code=409, detail="This company is already in the recycle bin")
+    if (_delete_status(company_id) or {}).get("status") == "running":
+        raise HTTPException(status_code=409, detail="This company is already being backed up and deleted")
 
-    # Safety net 1: a full backup first. If it cannot be made, nothing is deleted.
+    _set_delete_status(company_id, "running", "Taking a full backup")
+    background.add_task(_delete_to_recycle_bin, company_id, superadmin.email, superadmin.company_id)
+    return {"ok": True, "status": "running"}
+
+
+# Progress of a background delete, shared across app instances through Redis (plus this
+# process's own copy, for when Redis is not configured).
+_DELETE_STATUS_TTL = 6 * 60 * 60
+_delete_status_local: dict[str, dict] = {}
+
+
+def _set_delete_status(company_id: str, status: str, detail: str = "") -> None:
+    value = {"status": status, "detail": detail, "at": datetime.now(timezone.utc).isoformat()}
+    _delete_status_local[company_id] = value
+    cache.set(f"sa:delete:{company_id}", value, ttl=_DELETE_STATUS_TTL)
+
+
+def _delete_status(company_id: str) -> dict | None:
+    return cache.get(f"sa:delete:{company_id}") or _delete_status_local.get(company_id)
+
+
+def _delete_to_recycle_bin(company_id: str, by_email: str, audit_company_id: str) -> None:
+    """Background part of Delete. Safety net 1: a full backup first; if it cannot be made,
+    nothing is deleted. Safety net 2: the recycle bin. The company is hidden from every list
+    and its sign-ins are blocked (expiry set to yesterday); Restore undoes this, and the
+    nightly purge (worker.purge_recycle_bin) deletes it for good after RECYCLE_BIN_DAYS."""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
     try:
-        backup_key = backup_company_before_delete(db, company)
+        company = db.get(Company, company_id)
+        if not company or company.deleted_at:
+            _set_delete_status(company_id, "done", "Already in the recycle bin")
+            return
+        label = f"{company.name} ({company.id})"
+        try:
+            backup_key = backup_company_before_delete(db, company)
+        except Exception as exc:
+            db.rollback()
+            logger.error("Delete company %s: backup failed, nothing deleted: %s", label, exc)
+            _write_audit_blob(db, audit_company_id, by_email, "delete_company_failed", label, f"Backup failed, nothing was deleted: {exc}")
+            db.commit()
+            _set_delete_status(company_id, "failed", f"Backup failed, so nothing was deleted: {exc}")
+            return
+        now = datetime.now(timezone.utc)
+        company.deleted_prev_expiry = company.subscription_expires_at
+        company.subscription_expires_at = (now.date() - timedelta(days=1)).isoformat()
+        company.deleted_at = now
+        company.deleted_by = by_email
+        company.deleted_backup_key = backup_key
+        purge_on = (now + timedelta(days=RECYCLE_BIN_DAYS)).date().isoformat()
+        _write_audit_blob(db, audit_company_id, by_email, "delete_company", label,
+                          f"Moved to recycle bin; backup {backup_key}; purge on {purge_on}")
+        db.commit()
+        _set_delete_status(company_id, "done", f"Moved to the recycle bin; deleted for good on {purge_on}")
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=503, detail=f"Backup failed, so nothing was deleted: {exc}")
+        logger.exception("Delete company %s failed", company_id)
+        _set_delete_status(company_id, "failed", f"Delete failed, nothing was deleted: {exc}")
+    finally:
+        db.close()
 
-    # Safety net 2: the recycle bin. The company is hidden from every list and its sign-ins
-    # are blocked (expiry set to yesterday); Restore undoes this, and the nightly purge
-    # (worker.purge_recycle_bin) deletes it for good after RECYCLE_BIN_DAYS.
-    now = datetime.now(timezone.utc)
-    company.deleted_prev_expiry = company.subscription_expires_at
-    company.subscription_expires_at = (now.date() - timedelta(days=1)).isoformat()
-    company.deleted_at = now
-    company.deleted_by = superadmin.email
-    company.deleted_backup_key = backup_key
-    purge_on = (now + timedelta(days=RECYCLE_BIN_DAYS)).date().isoformat()
-    _write_audit_blob(
-        db, superadmin.company_id, superadmin.email, "delete_company",
-        f"{company.name} ({company.id})", f"Moved to recycle bin; backup {backup_key}; purge on {purge_on}",
-    )
-    db.commit()
-    return {"ok": True, "backup_key": backup_key, "purge_on": purge_on}
+
+@router.get("/companies/{company_id}/delete-status")
+def delete_company_status(company_id: str, db: Session = Depends(get_db), _: User = Depends(_require_superadmin)):
+    """running / done / failed for a Delete started above. A company already in the recycle
+    bin reads as done even if this process never saw the delete."""
+    status = _delete_status(company_id)
+    company = db.query(Company.deleted_at).filter(Company.id == company_id).first()
+    if company and company.deleted_at:
+        return {"status": "done", "detail": (status or {}).get("detail") or "In the recycle bin"}
+    return status or {"status": "unknown", "detail": ""}
 
 
 RECYCLE_BIN_DAYS = 7

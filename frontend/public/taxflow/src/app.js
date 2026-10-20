@@ -3604,6 +3604,7 @@ async function syncCompanyFromDatabase(){
       try{detail=(await response.clone().json())?.detail||'';}catch{}
       if(/subscription has expired/i.test(detail)){
         try{toast(detail,'err');}catch{}
+        try{sessionStorage.setItem('taxflow_subscription_expired','1');}catch{}  // login.html shows the renewal box
         localStorage.removeItem('taxflow_token');
         setTimeout(()=>window.location.replace('/login'),1500);
         return null;

@@ -31,7 +31,7 @@ a:hover{text-decoration:underline;}
 .su-page{position:relative;overflow:hidden;background:
   radial-gradient(900px 520px at 0% 100%,#dce8ff 0%,rgba(220,232,255,0) 70%),
   radial-gradient(700px 500px at 100% 0%,#eef4ff 0%,rgba(238,244,255,0) 70%),var(--bg);}
-.su-grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,500px);grid-template-areas:'top card' 'bottom card';column-gap:56px;row-gap:22px;
+.su-grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,450px);grid-template-areas:'top card' 'bottom card';column-gap:56px;row-gap:22px;
   padding:20px max(20px,env(safe-area-inset-right,0px)) 40px max(20px,env(safe-area-inset-left,0px));align-items:start;}
 
 /* ---------- left: brand + pitch ---------- */
@@ -51,25 +51,25 @@ a:hover{text-decoration:underline;}
 .su-intro h1{font-family:'Poppins',system-ui,sans-serif;font-size:clamp(34px,4.4vw,52px);line-height:1.06;font-weight:700;letter-spacing:-.03em;color:var(--text);text-wrap:balance;}
 .su-intro h1 .hl{background:linear-gradient(90deg,#1f5fe0,#3b82f6);-webkit-background-clip:text;background-clip:text;color:transparent;}
 .su-lede{font-size:17px;line-height:1.6;color:var(--text2);max-width:470px;}
-.perks{display:flex;flex-direction:column;gap:18px;list-style:none;margin-top:4px;}
-.perk{display:flex;gap:16px;align-items:center;}
-.perk-ic{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;flex:none;}
-.perk-ic svg{width:22px;height:22px;}
+.perks{display:flex;flex-direction:column;gap:12px;list-style:none;margin-top:2px;}
+.perk{display:flex;gap:13px;align-items:center;}
+.perk-ic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;flex:none;}
+.perk-ic svg{width:18px;height:18px;}
 .perk-ic.blue{background:#e3edff;color:#1f5fe0;}
 .perk-ic.green{background:#dcf6ee;color:#0e9f7a;}
 .perk-ic.purple{background:#eee6ff;color:#7b3fe4;}
-.perk b{display:block;font-size:16px;font-weight:600;color:var(--text);}
-.perk span{font-size:14.5px;color:var(--text2);}
+.perk b{display:block;font-size:14.5px;font-weight:600;color:var(--text);}
+.perk span{font-size:13px;color:var(--text2);}
 
 /* illustration: laptop with the real dashboard + phone */
-.su-visual{position:relative;margin-top:8px;height:300px;max-width:560px;}
+.su-visual{position:relative;margin-top:14px;height:240px;max-width:450px;}
 .su-note{position:absolute;right:31%;top:-22px;font-family:'Caveat',cursive;font-size:24px;line-height:1.05;color:#1f4fb8;transform:rotate(-8deg);text-align:center;}
 .su-note svg{position:absolute;right:-34px;top:30px;width:34px;height:46px;color:#1f4fb8;transform:scaleX(-1) rotate(-20deg);}
 .laptop{position:absolute;left:8%;bottom:18px;width:66%;}
 .laptop-screen{background:#0d1526;border-radius:14px 14px 4px 4px;padding:9px 9px 12px;box-shadow:0 24px 50px rgba(18,52,120,.22);}
 .laptop-screen picture,.laptop-screen img{display:block;width:100%;height:auto;border-radius:6px;aspect-ratio:1200/580;object-fit:cover;object-position:left top;}
 .laptop-base{height:12px;margin:0 -7%;background:linear-gradient(#d9e0ec,#b6c0d3);border-radius:0 0 14px 14px;box-shadow:0 10px 18px rgba(18,52,120,.14);}
-.phone{position:absolute;right:6%;bottom:10px;width:24%;min-width:110px;aspect-ratio:9/18.5;background:#0d1526;border-radius:22px;padding:7px;box-shadow:0 22px 40px rgba(18,52,120,.28);}
+.phone{position:absolute;right:6%;bottom:10px;width:24%;min-width:90px;aspect-ratio:9/18.5;background:#0d1526;border-radius:22px;padding:7px;box-shadow:0 22px 40px rgba(18,52,120,.28);}
 .phone-ui{height:100%;background:#fff;border-radius:16px;padding:12px 9px;display:flex;flex-direction:column;gap:7px;overflow:hidden;}
 .phone-ui .p-brand{display:flex;align-items:center;gap:5px;font:700 9px 'Poppins',sans-serif;color:#0b1b3f;}
 .phone-ui .p-brand img{width:10px;height:14px;object-fit:contain;}
@@ -79,27 +79,27 @@ a:hover{text-decoration:underline;}
 .p-ai i{display:inline-block;font-style:normal;font-size:6.5px;color:#fff;background:#1f5fe0;border-radius:999px;padding:3px 8px;}
 .p-row{display:flex;align-items:center;gap:6px;font-size:7px;color:#0b1b3f;padding:5px 6px;border:1px solid #edf2fb;border-radius:7px;}
 .p-row em{width:9px;height:9px;border-radius:50%;background:#e3edff;flex:none;}
-.su-wave{position:absolute;left:-30%;right:-10%;bottom:0;height:120px;background:#dce8ff;border-radius:50% 50% 0 0/100% 100% 0 0;opacity:.7;}
+.su-wave{position:absolute;left:-30%;right:-10%;bottom:0;height:96px;background:#dce8ff;border-radius:50% 50% 0 0/100% 100% 0 0;opacity:.7;}
 
 /* ---------- right: form card ---------- */
-.su-card{grid-area:card;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:24px 28px 20px;box-shadow:0 30px 70px rgba(31,95,224,.10),0 2px 6px rgba(31,95,224,.05);min-width:0;}
+.su-card{grid-area:card;background:var(--card);border:1px solid var(--border2);border-radius:18px;padding:22px 25px 18px;box-shadow:0 30px 70px rgba(31,95,224,.10),0 2px 6px rgba(31,95,224,.05);min-width:0;}
 .su-card-step{display:none;}
 .su-card-step.active{display:block;}
 .step-tag{display:inline-block;background:var(--blue-soft);color:var(--blue);font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;padding:5px 12px;border-radius:999px;margin-bottom:10px;}
 .step-title{font-family:'Poppins',system-ui,sans-serif;font-size:clamp(22px,2.1vw,26px);font-weight:600;letter-spacing:-.02em;line-height:1.1;color:var(--text);}
 .step-sub{font-size:13.5px;color:var(--text2);margin:4px 0 16px;line-height:1.5;}
 .err-banner{background:#fdecec;border:1px solid #f6c5c6;border-radius:10px;padding:10px 14px;font-size:14px;color:#b4282d;margin-bottom:16px;display:none;}
-.f-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;min-width:0;}
+.f-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:11px;min-width:0;}
 .field label{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#30425f;}
 .field label .req{color:var(--blue);}
 .field label .opt{text-transform:none;letter-spacing:0;font-weight:500;color:var(--text3);}
 .control{position:relative;display:flex;align-items:center;}
-.control .ic{position:absolute;left:14px;width:18px;height:18px;color:#6b7c9a;pointer-events:none;}
+.control .ic{position:absolute;left:13px;width:16px;height:16px;color:#6b7c9a;pointer-events:none;}
 .control input,.control select,.control textarea{width:100%;font:inherit;font-size:14px;color:var(--text);background:var(--input-bg);
-  border:1.5px solid var(--input-border);border-radius:10px;padding:10px 14px 10px 42px;outline:none;transition:border-color .15s,box-shadow .15s;appearance:none;-webkit-appearance:none;}
-.control textarea{min-height:52px;resize:vertical;padding-top:12px;line-height:1.45;}
-.control.ta .ic{top:11px;}
+  border:1.5px solid var(--input-border);border-radius:9px;padding:8px 13px 8px 38px;outline:none;transition:border-color .15s,box-shadow .15s;appearance:none;-webkit-appearance:none;}
+.control textarea{min-height:47px;resize:vertical;padding-top:10px;line-height:1.45;}
+.control.ta .ic{top:10px;}
 .control select{padding-right:44px;cursor:pointer;}
 .control .chev{position:absolute;right:16px;width:18px;height:18px;color:#3b4b68;pointer-events:none;}
 .control input::placeholder,.control textarea::placeholder{color:#93a1bb;}
@@ -107,15 +107,15 @@ a:hover{text-decoration:underline;}
 .field.error input,.field.error select{border-color:var(--red);}
 .field-error{display:none;font-size:12.5px;color:var(--red);}
 .field.error .field-error{display:block;}
-.phone-ctl{display:flex;border:1.5px solid var(--input-border);border-radius:10px;overflow:hidden;background:var(--input-bg);transition:border-color .15s,box-shadow .15s;}
+.phone-ctl{display:flex;border:1.5px solid var(--input-border);border-radius:9px;overflow:hidden;background:var(--input-bg);transition:border-color .15s,box-shadow .15s;}
 .phone-ctl:focus-within{border-color:var(--blue);box-shadow:0 0 0 4px rgba(31,95,224,.12);}
 .phone-prefix{display:flex;align-items:center;gap:7px;padding:0 12px;border-right:1.5px solid var(--input-border);font-size:14px;color:var(--text);white-space:nowrap;background:#fbfcff;}
 .phone-prefix{position:relative;cursor:pointer;}
 .phone-prefix select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;border:none;}
 .phone-prefix .caret{width:10px;height:6px;color:var(--text2);}
 .phone-prefix img{width:24px;height:16px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px rgba(0,0,0,.06);}
-.phone-ctl input{border:none;flex:1;min-width:0;font:inherit;font-size:14px;padding:10px 14px;outline:none;color:var(--text);background:transparent;}
-.btn-submit{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;margin-top:4px;border:none;border-radius:10px;padding:12px 20px;
+.phone-ctl input{border:none;flex:1;min-width:0;font:inherit;font-size:14px;padding:8px 13px;outline:none;color:var(--text);background:transparent;}
+.btn-submit{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;margin-top:4px;border:none;border-radius:9px;padding:10px 18px;
   background:linear-gradient(90deg,#2c6ff0,#1747b8);color:#fff;font:600 15px 'Poppins',sans-serif;cursor:pointer;box-shadow:0 12px 26px rgba(31,95,224,.28);transition:transform .15s,box-shadow .15s,filter .15s;}
 .btn-submit:hover{transform:translateY(-1px);filter:brightness(1.05);box-shadow:0 16px 30px rgba(31,95,224,.32);}
 .btn-submit:disabled{opacity:.7;cursor:wait;transform:none;}
@@ -149,7 +149,7 @@ a:hover{text-decoration:underline;}
   .f-row{grid-template-columns:1fr;gap:0;}
   .brand-name{font-size:26px;}
   .su-lede{font-size:16px;}
-  .perk-ic{width:44px;height:44px;}
+  .perk-ic{width:40px;height:40px;}
   .control input,.control select,.control textarea,.phone-ctl input,.phone-prefix{font-size:16px;}
 }
 @media (min-width:981px) and (max-height:720px){.step-sub{display:none}.step-title{margin-bottom:14px}.field{margin-bottom:10px}.su-grid{padding-top:12px}}
@@ -171,10 +171,6 @@ a:hover{text-decoration:underline;}
         <span class="brand-tag">Accounting<span>&bull;</span>Tax<span>&bull;</span>Payroll<span>&bull;</span>HR<span>&bull;</span>Business</span>
       </span>
     </a>
-    <div class="pill">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 01-2 2H7a2 2 0 01-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 010-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 010 5"/></svg>
-      Start your free trial
-    </div>
   </section>
 
   <!-- Form card -->
@@ -191,7 +187,7 @@ a:hover{text-decoration:underline;}
           <label for="full_name">Full name <span class="req">*</span></label>
           <div class="control">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
-            <input type="text" id="full_name" placeholder="Your full name" autocomplete="name">
+            <input type="text" id="full_name" placeholder="Your full name" autocomplete="name" maxlength="120">
           </div>
           <span class="field-error">Please enter your full name</span>
         </div>
@@ -199,7 +195,7 @@ a:hover{text-decoration:underline;}
           <label for="company_name">Company name <span class="req">*</span></label>
           <div class="control">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="12" height="18" rx="1"/><path d="M16 9h4v12h-4M8 7h2M8 11h2M8 15h2M12 7h0M12 11h0M12 15h0"/></svg>
-            <input type="text" id="company_name" placeholder="Your company name" autocomplete="organization">
+            <input type="text" id="company_name" placeholder="Your company name" autocomplete="organization" maxlength="160">
           </div>
           <span class="field-error">Please enter your company name</span>
         </div>
@@ -209,7 +205,7 @@ a:hover{text-decoration:underline;}
         <label for="email">Email address <span class="req">*</span> <span class="opt">(your username)</span></label>
         <div class="control">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
-          <input type="email" id="email" placeholder="you@company.com" autocomplete="username">
+          <input type="email" id="email" placeholder="you@company.com" autocomplete="username" maxlength="254">
         </div>
         <span class="field-error">Please enter a valid email address</span>
       </div>
@@ -219,7 +215,7 @@ a:hover{text-decoration:underline;}
           <label for="password">Password <span class="req">*</span></label>
           <div class="control">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/></svg>
-            <input type="password" id="password" placeholder="At least 8 characters" autocomplete="new-password">
+            <input type="password" id="password" placeholder="Letters + numbers, 8+" autocomplete="new-password" maxlength="128">
           </div>
           <span class="field-error">At least 8 characters</span>
         </div>
@@ -247,8 +243,9 @@ a:hover{text-decoration:underline;}
           <label for="phone">Phone / WhatsApp</label>
           <div class="phone-ctl">
             <span class="phone-prefix"><select id="phone-country" aria-label="Phone country code" onchange="onPhoneCountryChange()"></select><img id="phone-flag" src="https://flagcdn.com/w40/ae.png" alt="United Arab Emirates" width="24" height="16"> <span id="phone-code">+971</span><svg class="caret" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <input type="tel" id="phone" placeholder="50 000 0000" inputmode="numeric" autocomplete="tel-national">
+            <input type="tel" id="phone" placeholder="50 000 0000" inputmode="numeric" autocomplete="tel-national" maxlength="20">
           </div>
+          <span class="field-error">Enter a valid phone number</span>
         </div>
         <div class="field" id="fg-employee_count">
           <label for="employee_count">Number of employees</label>
@@ -256,12 +253,12 @@ a:hover{text-decoration:underline;}
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.8-3.4 3.2-5.2 6-5.2s5.2 1.8 6 5.2"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.3.2 4 1.8 4.5 4.6"/></svg>
             <select id="employee_count">
               <option value="">Select range…</option>
-              <option value="1–10">1 – 10</option>
-              <option value="11–50">11 – 50</option>
+              <option value="0–4">0 – 4</option>
+              <option value="5–9">5 – 9</option>
+              <option value="10–20">10 – 20</option>
+              <option value="21–50">21 – 50</option>
               <option value="51–100">51 – 100</option>
-              <option value="101–250">101 – 250</option>
-              <option value="251–500">251 – 500</option>
-              <option value="500+">500+</option>
+              <option value="100+">100+</option>
             </select>
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
           </div>
@@ -405,7 +402,38 @@ function onPhoneCountryChange(){
   document.getElementById('phone-code').textContent='+'+c[2];
 }
 function countryName(){ const sel=document.getElementById('country'); return findCountry(sel.value)[1]; }
-function setErr(id,show){ const el=document.getElementById('fg-'+id); if(el) el.classList.toggle('error',show); }
+// Marks a field and, when given, puts the reason under it.
+function setErr(id,show,msg){
+  const el=document.getElementById('fg-'+id); if(!el) return;
+  el.classList.toggle('error',!!show);
+  const m=el.querySelector('.field-error'); if(m&&msg) m.textContent=msg;
+}
+// Same rules as the server (RegisterRequest in backend/app/schemas.py). Returns the reason a
+// field is wrong, or '' when it is fine.
+const SIGNUP_RULES={
+  full_name:v=>!v?'Please enter your full name':(v.length<2||v.length>120||!/^[\p{L}]+(?:[ .'\-]+[\p{L}]+)*\.?$/u.test(v))?'Use letters only, e.g. Ahmed Ali':'',
+  company_name:v=>!v?'Please enter your company name':v.length<2?'The company name is too short':/https?:\/\/|www\.|[<>{}]/i.test(v)?'Links are not allowed in the company name':'',
+  email:v=>!v?'Please enter your email address':!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(v)?'Please enter a valid email address':'',
+  password:(v,email)=>v.length<8?'At least 8 characters':!(/\p{L}/u.test(v)&&/\d/.test(v))?'Use at least one letter and one number':(email&&v.toLowerCase()===email.toLowerCase())?'Do not use your email as the password':'',
+  phone:v=>{ if(!v) return ''; const d=v.replace(/\D/g,''); return (!/^[\d\s().\-]+$/.test(v)||d.length<6||d.length>12)?'Enter a valid phone number':''; },
+};
+function checkField(id){
+  const val=id==='password'?document.getElementById(id).value:document.getElementById(id).value.trim();
+  const msg=SIGNUP_RULES[id](val,document.getElementById('email').value.trim());
+  setErr(id,!!msg,msg);
+  return msg;
+}
+// After a first try, each field re-checks itself as it is corrected.
+let _signupTried=false;
+document.addEventListener('input',e=>{
+  if(!_signupTried) return;
+  const id=e.target&&e.target.id;
+  if(SIGNUP_RULES[id]) checkField(id);
+  if(id==='password'||id==='password2'){
+    const p=document.getElementById('password').value, p2=document.getElementById('password2').value;
+    setErr('password2',!!p2&&p!==p2);
+  }
+});
 function showBanner(text){ const b=document.getElementById('err-banner'); b.textContent=text||''; b.style.display=text?'block':'none'; }
 function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
@@ -415,11 +443,15 @@ async function requestTrial(){
   const full_name=v('full_name'), company=v('company_name'), email=v('email'), country=countryName();
   const password=document.getElementById('password').value, password2=document.getElementById('password2').value;
   const num=v('phone'), code=document.getElementById('phone-code').textContent, employees=v('employee_count'), message=v('message');
-  const emailOk=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-  setErr('full_name',!full_name); setErr('company_name',!company); setErr('email',!emailOk);
-  setErr('password',password.length<8); setErr('password2',password.length>=8&&password!==password2);
-  if(!full_name||!company||!emailOk||password.length<8){ showBanner('Please fill in the highlighted fields.'); return; }
-  if(password!==password2){ showBanner('The two passwords do not match.'); return; }
+  _signupTried=true;
+  const bad=['full_name','company_name','email','password','phone'].filter(id=>checkField(id));
+  const mismatch=!checkField('password')&&password!==password2;
+  setErr('password2',mismatch);
+  if(bad.length||mismatch){
+    showBanner(bad.length?'Please correct the highlighted fields.':'The two passwords do not match.');
+    const first=document.getElementById(bad[0]||'password2'); if(first) first.focus();
+    return;
+  }
   showBanner('');
   if(v('website'))return;   // a hidden field only a bot fills in
   const phone=num?code+' '+num:null;
@@ -448,7 +480,7 @@ async function requestTrial(){
     let msg='Could not create your account. Please try again.';
     if(resp.status===409) msg='This email cannot be used to start a trial. If you already have an account, sign in instead.';
     else if(resp.status===429) msg='Too many sign-ups from this connection. Please try again later.';
-    else if(Array.isArray(data.detail)&&data.detail.length) msg=data.detail.map(d=>d&&d.msg?d.msg:JSON.stringify(d)).join(' ');
+    else if(Array.isArray(data.detail)&&data.detail.length) msg=data.detail.map(d=>d&&d.msg?String(d.msg).replace(/^Value error,\s*/i,''):JSON.stringify(d)).join(' ');
     else if(typeof data.detail==='string'&&data.detail) msg=data.detail;
     showBanner(msg);
   }catch(e){

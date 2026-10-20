@@ -58,7 +58,13 @@ def assert_company_active(subscription_expires_at: str | None) -> None:
     if subscription_expires_at <= today:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your company's subscription has expired. Contact support to renew.",
+            # login.html turns this into WhatsApp / Call / Email buttons; ESS, POS and the
+            # apps show it as text, so the contact details are part of the message.
+            detail=(
+                "Your company's subscription has expired (free trial or plan ended). Please contact "
+                "our sales or support team to renew: WhatsApp +971 4 583 1156, call +971 4 583 1156, "
+                "or email hello@etaxflow.ae."
+            ),
         )
 
 

@@ -101,5 +101,38 @@ def test_self_service_trial_signs_in_and_is_listed_for_follow_up(client, db):
 
     # The same email can't start a second trial.
     again = client.post("/api/v1/auth/register", json={
-        "email": email, "password": "Trial-pass-2", "full_name": "X", "company_name": "Y"})
+        "email": email, "password": "Trial-pass-2", "full_name": "Another Owner", "company_name": "Another Co"})
     assert again.status_code == 409
+
+
+def test_register_rejects_invalid_signup_fields(client, db):
+    """Sign-up validation (RegisterRequest): bad names, weak passwords, bad phone numbers,
+    links in the company name and unknown employee ranges are refused with a clear reason,
+    and no company is created."""
+    from app.models import Company
+
+    base = {"email": "valid-signup@example.com", "password": "Trial-pass-1", "full_name": "Sara Ahmed",
+            "company_name": "Valid Signup Co", "phone": "+971 50 123 4567", "employee_count": "5–9"}
+    cases = [
+        ({"full_name": "X"}, "full name"),
+        ({"full_name": "John 123"}, "full name"),
+        ({"company_name": "Visit http://spam.example"}, "company name"),
+        ({"password": "abcdefgh"}, "letter and one number"),
+        ({"password": "12345678"}, "letter and one number"),
+        ({"password": "short1"}, "8 to 128"),
+        ({"phone": "call me"}, "phone"),
+        ({"phone": "+971 12"}, "phone"),
+        ({"employee_count": "1000"}, "employees"),
+        ({"email": "not-an-email"}, "email"),
+        ({"email": "same1pass@example.com", "password": "same1pass@example.com"}, "same as your email"),
+    ]
+    for change, reason in cases:
+        r = client.post("/api/v1/auth/register", json={**base, **change})
+        assert r.status_code == 422, (change, r.text)
+        assert reason in r.text, (change, r.text)
+    assert db.query(Company).filter(Company.name == "Valid Signup Co").count() == 0
+
+    ok = client.post("/api/v1/auth/register", json={**base, "full_name": "  Sara   Ahmed "})
+    assert ok.status_code == 201, ok.text
+    db.expire_all()
+    assert db.query(Company).filter(Company.name == "Valid Signup Co").count() == 1

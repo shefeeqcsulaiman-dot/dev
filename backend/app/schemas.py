@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -14,6 +15,19 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+# Self-service sign-up checks (POST /auth/register). signup.html runs the same rules first,
+# so these mostly stop scripted or hand-made requests.
+SIGNUP_EMPLOYEE_COUNTS = {"0–4", "5–9", "10–20", "21–50", "51–100", "100+",
+                          # earlier ranges, still accepted
+                          "1–10", "11–50", "101–250", "251–500", "500+"}
+_NAME_RE = re.compile(r"^[^\W\d_]+(?:[ .'\-]+[^\W\d_]+)*\.?$")
+_LINK_RE = re.compile(r"https?://|www\.|[<>{}]", re.I)
+
+
+def _clean_text(v: str) -> str:
+    return re.sub(r"\s+", " ", v or "").strip()
 
 
 class RegisterRequest(BaseModel):
@@ -45,6 +59,72 @@ class RegisterRequest(BaseModel):
         if v is not None and (not v.isdigit() or len(v) != 15):
             raise ValueError("TRN must be exactly 15 numeric digits")
         return v
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, v: str) -> str:
+        v = _clean_text(v)
+        if not 2 <= len(v) <= 120 or not _NAME_RE.match(v):
+            raise ValueError("Enter your full name using letters only (2 to 120 characters)")
+        return v
+
+    @field_validator("company_name")
+    @classmethod
+    def validate_company_name(cls, v: str) -> str:
+        v = _clean_text(v)
+        if not 2 <= len(v) <= 160 or not re.search(r"[^\W_]", v) or _LINK_RE.search(v):
+            raise ValueError("Enter your company name (2 to 160 characters, no links)")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_length(cls, v: str) -> str:
+        v = v.strip().lower()
+        if len(v) > 254:
+            raise ValueError("The email address is too long")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if not 8 <= len(v) <= 128:
+            raise ValueError("The password needs 8 to 128 characters")
+        if not re.search(r"[^\W\d_]", v) or not re.search(r"\d", v):
+            raise ValueError("The password needs at least one letter and one number")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: str | None) -> str | None:
+        v = _clean_text(v or "")
+        if not v:
+            return None
+        digits = re.sub(r"\D", "", v)
+        if not re.fullmatch(r"\+?[\d\s().\-]+", v) or not 7 <= len(digits) <= 15:
+            raise ValueError("Enter a valid phone number (7 to 15 digits)")
+        return v
+
+    @field_validator("country")
+    @classmethod
+    def validate_country(cls, v: str | None) -> str | None:
+        v = _clean_text(v or "")
+        if len(v) > 80 or _LINK_RE.search(v):
+            raise ValueError("Choose a country from the list")
+        return v or None
+
+    @field_validator("employee_count")
+    @classmethod
+    def validate_employee_count(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        if v and v not in SIGNUP_EMPLOYEE_COUNTS:
+            raise ValueError("Choose the number of employees from the list")
+        return v or None
+
+    @model_validator(mode="after")
+    def password_not_email(self):
+        if self.password.strip().lower() == str(self.email).lower():
+            raise ValueError("The password cannot be the same as your email")
+        return self
 
 
 class CompanyOut(BaseModel):
