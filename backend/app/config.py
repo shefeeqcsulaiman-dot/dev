@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     alert_webhook_url: str = ""
+    # Outreach dashboard (app/outreach_forward.py): trial requests and sign-ups are copied there.
+    # Off unless INTAKE_SECRET is set, to the same value as on the dashboard.
+    intake_secret: str = ""
+    outreach_intake_url: str = "https://outreach.etaxflow.com/api/public/request"
     # Database connection pool
     db_pool_size: int = 20
     db_max_overflow: int = 40
