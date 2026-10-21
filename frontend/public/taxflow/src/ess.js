@@ -1673,7 +1673,7 @@
       }).join('');
     }
     if (!el) return;
-    if (!all.length) { el.innerHTML = emptyState('check', 'No tasks assigned to you', 'Tasks your manager assigns will appear here.'); return; }
+    if (!all.length) { el.classList.remove('tk-grid'); el.innerHTML = emptyState('check', 'No tasks assigned to you', 'Tasks your manager assigns will appear here.'); return; }
     var q = (document.getElementById('tk-search') || {}).value || '';
     q = q.trim().toLowerCase();
     var sort = (document.getElementById('tk-sort') || {}).value || 'due-asc';
@@ -1691,6 +1691,7 @@
       if (sort === 'status') return (statusRank[_taskStatusLabel(a.status).cls] - statusRank[_taskStatusLabel(b.status).cls]) || (da < db ? -1 : 1);
       return da < db ? -1 : da > db ? 1 : 0;
     });
+    el.classList.remove('tk-grid');
     if (!rows.length) { el.innerHTML = emptyState('check', 'No matching tasks', 'Try another priority or search.'); return; }
     var priMeta = {high: ['alert', 'High priority'], medium: ['bars', 'Medium priority'], low: ['ok', 'Low priority']};
     el.innerHTML = rows.map(function(t) {
@@ -1701,28 +1702,25 @@
       var color = /^#[0-9a-f]{3,8}$/i.test(t.color || '') ? t.color : '';
       var progress = Math.max(0, Math.min(100, Number(t.progress) || 0));
       var id = escHtml(t.id || '');
-      return '<article class="tk-item tk-pri-' + pri + (done ? ' is-done' : '') + '"' + (color ? ' style="--tk-accent:' + escHtml(color) + '"' : '') + '>' +
-        '<div class="tk-icon">' + _tkIcon(_tkKindIcon(t), 30) + '</div>' +
-        '<div class="tk-body">' +
-          '<h3 class="tk-title">' + escHtml(t.title || 'Untitled task') + '</h3>' +
-          (t.description ? '<p class="tk-desc">' + escHtml(t.description) + '</p>' : '') +
-          '<span class="tk-pri">' + _tkIcon(priMeta[pri][0], 16) + priMeta[pri][1] + '</span>' +
-          '<div class="tk-meta">' +
-            '<span class="' + (due.overdue ? 'tk-overdue' : '') + '">' + _tkIcon('cal', 16) + escHtml(due.text) + (due.overdue ? ' · Overdue' : '') + '</span>' +
-            '<span class="tk-sep" aria-hidden="true"></span>' +
-            '<span>' + _tkIcon('user', 16) + 'Assigned to: You</span>' +
-          '</div>' +
-          (progress > 0 && !done ? '<div class="tk-progress" role="progressbar" aria-valuenow="' + progress + '" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><i style="width:' + progress + '%"></i><span>' + progress + '%</span></div>' : '') +
+      // One card per task (a grid: several across on a wide screen, one on a phone).
+      return '<article class="tkc tk-pri-' + pri + (done ? ' is-done' : '') + '"' + (color ? ' style="--tk-accent:' + escHtml(color) + '"' : '') + '>' +
+        (t.id ? '<button type="button" class="tk-more tkc-more" aria-label="More actions" data-id="' + id + '" data-status="' + st.cls + '" onclick="openEssTaskMenu(event,this)">&#8943;</button>' : '') +
+        '<div class="tkc-top">' +
+          '<div class="tk-icon">' + _tkIcon(_tkKindIcon(t), 22) + '</div>' +
+          '<h3 class="tkc-title">' + escHtml(t.title || 'Untitled task') + '</h3>' +
+          '<span class="tk-pri">' + _tkIcon(priMeta[pri][0], 13) + priMeta[pri][1] + '</span>' +
         '</div>' +
-        '<div class="tk-side">' +
-          '<div class="tk-side-top">' +
-            '<span class="tk-status tk-status-' + st.cls + '">' + escHtml(st.text) + '</span>' +
-            (t.id ? '<button type="button" class="tk-more" aria-label="More actions" data-id="' + id + '" data-status="' + st.cls + '" onclick="openEssTaskMenu(event,this)">&#8943;</button>' : '') +
-          '</div>' +
-          _taskActions(t) +
+        (t.description ? '<p class="tkc-desc">' + escHtml(t.description) + '</p>' : '') +
+        (progress > 0 && !done ? '<div class="tk-progress" role="progressbar" aria-valuenow="' + progress + '" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><i style="width:' + progress + '%"></i><span>' + progress + '%</span></div>' : '') +
+        '<div class="tkc-meta">' +
+          '<span class="tk-due' + (due.overdue ? ' tk-overdue' : '') + '">' + _tkIcon('cal', 14) + escHtml(due.text) + (due.overdue ? ' · Overdue' : '') + '</span>' +
+          '<span class="tk-sep" aria-hidden="true"></span>' +
+          '<span class="tk-status tk-status-' + st.cls + '">' + escHtml(st.text) + '</span>' +
         '</div>' +
+        _taskActions(t) +
       '</article>';
     }).join('');
+    el.classList.add('tk-grid');
   }
   // "⋯": move the task to any status.
   function openEssTaskMenu(event, btn) {
