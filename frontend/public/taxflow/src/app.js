@@ -116,6 +116,26 @@ function restoreNavState(state){
   updateBackButton();
 }
 
+// A refresh reopens the page (and tab) you were on, per browser tab (sessionStorage), in the
+// main app and HRMS alike. Saved after every page/tab change; reopened once the app has loaded.
+(function keepPageOnRefresh(){
+  const KEY='tf_nav:'+location.pathname;
+  const save=()=>{try{sessionStorage.setItem(KEY,JSON.stringify(getCurrentNavState()));}catch(e){}};
+  window.addEventListener('load',()=>{
+    ['go','stab','goHrmsTab','goHrmsExtTab'].forEach(name=>{
+      const f=window[name];
+      if(typeof f==='function'&&!f._keepsPage){const w=function(...a){const r=f.apply(this,a);setTimeout(save,0);return r;};w._keepsPage=true;window[name]=w;}
+    });
+    if(/^#open=/.test(location.hash))return;   // a deep link decides the page instead
+    let st=null;
+    try{st=JSON.parse(sessionStorage.getItem(KEY)||'null');}catch(e){}
+    if(!st||!st.page)return;
+    const home=window.HRMS_STANDALONE?'hrms':'dashboard';
+    if(st.page===home&&!st.tab)return;
+    setTimeout(()=>{if(document.getElementById('page-'+st.page))restoreNavState(st);},900);
+  });
+})();
+
 function goBack(){
   const openOverlay=[...document.querySelectorAll('.overlay.on')].pop();
   if(openOverlay){
@@ -22609,6 +22629,7 @@ function openRotaCellEditor(cell){
   setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??(setupBreak!==undefined&&setupBreak!==''?Number(setupBreak)||0:undefined)??ROTA_EDIT_DEFAULTS[type]?.break_minutes??0));
   setSelectValue(document.getElementById('rota-edit-mark'),assignment?.mark||ROTA_EDIT_DEFAULTS[type]?.mark||'Shift');
   {const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=document.getElementById('rota-edit-mark')?.value==='OT'?'':'none';}
+  _fillRotaLeaveTypes(assignment?.leave_type);
   setFieldValue(document.getElementById('rota-edit-notes'),assignment?.notes||'');
   renderRotaEditTasks(assignment?.tasks||[]);
   const readOnly=!hrmsCan('rota:edit');
@@ -22861,6 +22882,16 @@ async function saveActiveRotaAssignmentFromModal(forceOff=false){
 
 async function saveRotaCellShift(){
   if(!hrmsCan('rota:edit')){toast('Your role can view the rota but not change it','warn');return;}
+  const markLeave=document.getElementById('rota-edit-mark')?.value==='Leave';
+  const employeeNo=activeRotaCell?.dataset.employeeId,day=activeRotaCell?.dataset.date;
+  let leaveChanged=false;
+  if(markLeave||_rotaCellWasLeave()){
+    const err=markLeave
+      ?await _rotaLeaveSync('book',employeeNo,day,document.getElementById('rota-edit-leave-type')?.value||'Annual Leave')
+      :await _rotaLeaveSync('unbook',employeeNo,day);
+    if(err){toast(err,'err');return;}
+    leaveChanged=true;
+  }
   const assignment=await saveActiveRotaAssignmentFromModal(false);
   if(!assignment)return;
   if(assignment._saveFailed){
@@ -22870,12 +22901,22 @@ async function saveRotaCellShift(){
     return;
   }
   closeM('m-edit-shift');
-  toast('Shift saved to database','ok');
+  toast(markLeave?'Leave booked and approved':'Shift saved to database','ok');
   audit('Updated rota cell',`${assignment.employee_name} ${assignment.date}`,'Saved');
+  if(leaveChanged)_refreshRotaLeaves();
+}
+// After booking/cancelling from the rota: the Leave list, balances and rota overlay re-read.
+async function _refreshRotaLeaves(){
+  try{const r=await _fetchLeaveRequestsList();if(r.ok){_leaveRequestsCache=await r.json();renderRotaBoards();if(typeof renderLeaveTable==='function')renderLeaveTable();}}catch(e){}
 }
 
 async function removeRotaCellShift(){
   if(!hrmsCan('rota:edit')){toast('Your role can view the rota but not change it','warn');return;}
+  const wasLeave=_rotaCellWasLeave();
+  if(wasLeave){
+    const err=await _rotaLeaveSync('unbook',activeRotaCell?.dataset.employeeId,activeRotaCell?.dataset.date);
+    if(err){toast(err,'err');return;}
+  }
   const assignment=await saveActiveRotaAssignmentFromModal(true);
   if(!assignment)return;
   if(assignment._saveFailed){
@@ -22885,7 +22926,8 @@ async function removeRotaCellShift(){
     return;
   }
   closeM('m-edit-shift');
-  toast('Shift removed','warn');
+  toast(wasLeave?'Shift removed and the leave cancelled':'Shift removed','warn');
+  if(wasLeave)_refreshRotaLeaves();
   audit('Removed rota cell',`${assignment.employee_name} ${assignment.date}`,'Deleted');
 }
 
@@ -22950,7 +22992,34 @@ function _ensureRotaLeaves(){
   }).catch(()=>{});
 }
 
-document.addEventListener('change',e=>{if(e.target&&e.target.id==='rota-edit-mark'){const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=e.target.value==='OT'?'':'none';}});
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='rota-edit-mark'){const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=e.target.value==='OT'?'':'none';_fillRotaLeaveTypes();}});
+// Rota "Mark As: Leave": the leave types HR offers (the Request Leave form's list, inactive
+// ones left out), shown only while Leave is picked.
+function _fillRotaLeaveTypes(current){
+  const wrap=document.getElementById('rota-edit-leave-wrap'),sel=document.getElementById('rota-edit-leave-type');
+  if(!wrap||!sel)return;
+  const isLeave=document.getElementById('rota-edit-mark')?.value==='Leave';
+  wrap.style.display=isLeave?'':'none';
+  const types=[...(document.getElementById('leave-type')?.options||[])].filter(o=>!o.hidden&&!o.disabled).map(o=>o.value||o.textContent);
+  const list=types.length?types:['Annual Leave','Sick Leave','Unpaid Leave'];
+  const keep=current||sel.value||'Annual Leave';
+  if(sel.options.length!==list.length||[...sel.options].some((o,i)=>o.value!==list[i]))sel.innerHTML=list.map(t=>`<option>${escapeHtml(t)}</option>`).join('');
+  if(list.includes(keep))sel.value=keep;
+}
+// Books (or cancels) the real leave behind a rota Leave day (POST /leave/rota-book|rota-unbook).
+// Returns an error message, or '' when done.
+async function _rotaLeaveSync(action,employeeNo,date,leaveType){
+  try{
+    const r=await fetch(`${apiBaseUrl()}/leave/rota-${action}`,{method:'POST',headers:backendHeaders(),
+      body:JSON.stringify(action==='book'?{employee_no:employeeNo,date,leave_type:leaveType}:{employee_no:employeeNo,date})});
+    if(r.ok)return '';
+    const d=await r.json().catch(()=>({}));
+    return typeof d.detail==='string'?d.detail:(Array.isArray(d.detail)?d.detail.map(x=>x.msg).join(' '):`HTTP ${r.status}`);
+  }catch(e){return 'Cannot reach the server';}
+}
+function _rotaCellWasLeave(){
+  try{const a=JSON.parse(activeRotaCell?.dataset.assignment||'{}');return String(a.code||'').toUpperCase()==='L'||a.mark==='Leave';}catch{return false;}
+}
 function _rotaIsDayOff(existing,staffId,date){
   if(existing)return String(existing.code||'').toUpperCase()==='OFF'||String(existing.type||'').toLowerCase()==='off';
   const d=new Date(date+'T00:00:00');
@@ -22977,6 +23046,125 @@ function _labelCardTables(){
     .observe(document.body,{childList:true,subtree:true});
   if(document.body)start();else document.addEventListener('DOMContentLoaded',start);
 }
+// ── Support tickets (main app + HRMS → the ETaxFlow team, Super Admin > Support Tickets) ──
+// GET/POST /support/tickets, /support/tickets/{id}(/messages|/close), /support/unread.
+const SUP_CATEGORIES=['Question','Bug','Billing','Feature request','Other'],SUP_PRIORITIES=['Low','Normal','High','Urgent'];
+const SUP_STATUS={open:'Open',in_progress:'In progress',resolved:'Resolved',closed:'Closed'};
+function _supApi(path,opts={}){return fetch(`${apiBaseUrl()}${path}`,{...opts,headers:{...backendHeaders(),...(opts.headers||{})}});}
+async function _supErr(r){const d=await r.json().catch(()=>({}));return typeof d.detail==='string'?d.detail:(Array.isArray(d.detail)?d.detail.map(x=>String(x.msg||'').replace(/^Value error,\s*/,'')).join(' '):`HTTP ${r.status}`);}
+function _supModal(){
+  let o=document.getElementById('m-support');
+  if(o)return o;
+  o=document.createElement('div');o.className='overlay';o.id='m-support';
+  o.addEventListener('click',e=>{if(e.target===o)closeM('m-support');});
+  o.innerHTML='<div class="modal"><div class="modal-title" id="sup-title">Support</div><div class="modal-sub" id="sup-sub">Raise a ticket to the ETaxFlow team. We reply here.</div><div id="sup-body"></div></div>';
+  document.body.appendChild(o);
+  return o;
+}
+async function openSupport(){_supModal();showM('m-support');await _supList();}
+async function _supList(){
+  const body=document.getElementById('sup-body');
+  document.getElementById('sup-title').textContent='Support';
+  document.getElementById('sup-sub').textContent='Raise a ticket to the ETaxFlow team. We reply here.';
+  body.innerHTML='<div class="loading" style="padding:14px;color:var(--text3)">Loading…</div>';
+  const r=await _supApi('/support/tickets');
+  if(!r.ok){body.innerHTML=`<div class="err-msg" style="display:block">${escapeHtml(await _supErr(r))}</div>`;return;}
+  const rows=await r.json();
+  body.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:13px">Your tickets</b><button class="btn btn-p btn-sm" type="button" onclick="_supNew()">+ New ticket</button></div>`+
+    (rows.length?`<div class="sup-list">${rows.map(t=>`<button type="button" class="sup-row${t.unread?' unread':''}" onclick="_supOpen('${escapeHtml(t.id)}')">
+      <div style="flex:1;min-width:0"><b>${escapeHtml(t.subject)}</b><small>${escapeHtml(t.reference)} · ${escapeHtml(t.category)} · ${escapeHtml(t.priority)} · ${escapeHtml(new Date(t.last_message_at).toLocaleString())}${t.unread?' · <span style="color:var(--accent);font-weight:700">New reply</span>':''}</small></div>
+      <span class="sup-st sup-st-${escapeHtml(t.status)}">${SUP_STATUS[t.status]||escapeHtml(t.status)}</span></button>`).join('')}</div>`
+      :'<div style="padding:18px;text-align:center;color:var(--text3);font-size:13px">No tickets yet. Use <b>+ New ticket</b> to ask a question, report a problem or request a feature.</div>')+
+    '<div class="modal-foot"><button class="btn btn-g" type="button" onclick="closeM(\'m-support\')">Close</button></div>';
+}
+function _supFile(input,cb){
+  const f=input.files&&input.files[0];if(!f){cb(null);return;}
+  if(f.size>3*1024*1024){toast('The file is too large (3 MB at most)','warn');input.value='';cb(null);return;}
+  const rd=new FileReader();rd.onload=()=>cb({data:rd.result,name:f.name});rd.readAsDataURL(f);
+}
+function _supNew(){
+  document.getElementById('sup-title').textContent='New support ticket';
+  document.getElementById('sup-sub').textContent='Tell us what you need. Add a screenshot if it helps.';
+  const opt=(list,sel)=>list.map(v=>`<option${v===sel?' selected':''}>${v}</option>`).join('');
+  document.getElementById('sup-body').innerHTML=`
+    <div id="sup-err" class="err-msg"></div>
+    <div class="fg"><label class="fl">Subject</label><input class="fi" id="sup-subject" maxlength="200" placeholder="e.g. Invoice PDF shows the wrong VAT"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Category</label><select class="fi" id="sup-category">${opt(SUP_CATEGORIES,'Question')}</select></div>
+      <div class="fg"><label class="fl">Priority</label><select class="fi" id="sup-priority">${opt(SUP_PRIORITIES,'Normal')}</select></div></div>
+    <div class="fg"><label class="fl">Message</label><textarea class="fi" id="sup-message" rows="5" maxlength="8000" placeholder="What happened, where, and what you expected"></textarea></div>
+    <div class="fg"><label class="fl">Screenshot or PDF (optional)</label><input class="fi" id="sup-file" type="file" accept="image/*,application/pdf"></div>
+    <div class="modal-foot"><button class="btn btn-g" type="button" onclick="_supList()">Back</button><button class="btn btn-p" type="button" id="sup-send" onclick="_supCreate()">Send ticket</button></div>`;
+  document.getElementById('sup-subject').focus();
+}
+function _supCreate(){
+  const err=document.getElementById('sup-err');err.style.display='none';
+  const subject=document.getElementById('sup-subject').value.trim(),message=document.getElementById('sup-message').value.trim();
+  if(subject.length<3||!message){err.textContent='Write a subject and a message.';err.style.display='block';return;}
+  const btn=document.getElementById('sup-send');btn.disabled=true;btn.textContent='Sending…';
+  _supFile(document.getElementById('sup-file'),async file=>{
+    const r=await _supApi('/support/tickets',{method:'POST',body:JSON.stringify({subject,message,
+      category:document.getElementById('sup-category').value,priority:document.getElementById('sup-priority').value,
+      attachment:file?file.data:null,attachment_name:file?file.name:null})});
+    btn.disabled=false;btn.textContent='Send ticket';
+    if(!r.ok){err.textContent=await _supErr(r);err.style.display='block';return;}
+    const t=await r.json();toast(`Ticket ${t.reference} sent to the ETaxFlow team`,'ok');_supOpen(t.id);
+  });
+}
+async function _supOpen(id){
+  const body=document.getElementById('sup-body');
+  body.innerHTML='<div class="loading" style="padding:14px;color:var(--text3)">Loading…</div>';
+  const r=await _supApi(`/support/tickets/${encodeURIComponent(id)}`);
+  if(!r.ok){body.innerHTML=`<div class="err-msg" style="display:block">${escapeHtml(await _supErr(r))}</div>`;return;}
+  const t=await r.json();
+  document.getElementById('sup-title').textContent=t.subject;
+  document.getElementById('sup-sub').innerHTML=`${escapeHtml(t.reference)} · ${escapeHtml(t.category)} · ${escapeHtml(t.priority)} · <span class="sup-st sup-st-${escapeHtml(t.status)}">${SUP_STATUS[t.status]||escapeHtml(t.status)}</span>`;
+  const closed=t.status==='closed';
+  body.innerHTML=`<div class="sup-thread" id="sup-thread">${t.messages.map(m=>`<div class="sup-msg ${m.side}"><small>${escapeHtml(m.side==='support'?'ETaxFlow Support':(m.author||'You'))} · ${escapeHtml(new Date(m.created_at).toLocaleString())}</small>${escapeHtml(m.body)}${m.has_attachment?`<div><a href="#" onclick="_supAttachment('${escapeHtml(m.id)}');return false">📎 ${escapeHtml(m.attachment_name||'Attachment')}</a></div>`:''}</div>`).join('')}</div>
+    <div id="sup-err" class="err-msg"></div>
+    <div class="fg"><textarea class="fi" id="sup-reply" rows="3" maxlength="8000" placeholder="${closed?'Write to reopen this ticket':'Write a reply'}"></textarea></div>
+    <div class="fg"><input class="fi" id="sup-file" type="file" accept="image/*,application/pdf"></div>
+    <div class="modal-foot"><button class="btn btn-g" type="button" onclick="_supList()">All tickets</button>
+      ${closed?'':`<button class="btn btn-g" type="button" onclick="_supClose('${escapeHtml(t.id)}')">Close ticket</button>`}
+      <button class="btn btn-p" type="button" id="sup-send" onclick="_supReply('${escapeHtml(t.id)}')">Send reply</button></div>`;
+  const th=document.getElementById('sup-thread');th.scrollTop=th.scrollHeight;
+  refreshSupportBadge();
+}
+function _supReply(id){
+  const err=document.getElementById('sup-err');err.style.display='none';
+  const message=document.getElementById('sup-reply').value.trim();
+  if(!message){err.textContent='Write a reply.';err.style.display='block';return;}
+  const btn=document.getElementById('sup-send');btn.disabled=true;
+  _supFile(document.getElementById('sup-file'),async file=>{
+    const r=await _supApi(`/support/tickets/${encodeURIComponent(id)}/messages`,{method:'POST',body:JSON.stringify({message,attachment:file?file.data:null,attachment_name:file?file.name:null})});
+    btn.disabled=false;
+    if(!r.ok){err.textContent=await _supErr(r);err.style.display='block';return;}
+    _supOpen(id);
+  });
+}
+async function _supClose(id){
+  if(!(await appConfirm({title:'Close ticket',message:'Close this ticket? You can reopen it any time by writing in it.',okText:'Close ticket'})))return;
+  const r=await _supApi(`/support/tickets/${encodeURIComponent(id)}/close`,{method:'POST'});
+  if(!r.ok){toast(await _supErr(r),'err');return;}
+  _supOpen(id);
+}
+async function _supAttachment(id){
+  const r=await _supApi(`/support/messages/${encodeURIComponent(id)}/attachment`);
+  if(!r.ok){toast('Could not open the attachment','err');return;}
+  const url=URL.createObjectURL(await r.blob());window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+// The red number on the Support button: tickets with a reply not yet opened.
+async function refreshSupportBadge(){
+  const badge=document.getElementById('support-badge');if(!badge)return;
+  try{
+    const r=await _supApi('/support/unread');
+    if(r.status===403){document.getElementById('support-btn')?.remove();return;}   // Super Admin / branch login
+    if(!r.ok)return;
+    const n=(await r.json()).unread||0;
+    badge.textContent=n;
+    if(badge.classList.contains('hm-badge'))badge.style.display=n?'':'none';else badge.hidden=!n;
+  }catch(e){}
+}
+window.addEventListener('load',()=>{if(localStorage.getItem('taxflow_token')){setTimeout(refreshSupportBadge,2500);setInterval(refreshSupportBadge,120000);}});
 function assignmentFor(staff,date,day){
   const existing=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
   // A Holiday Calendar day the employee isn't working shows as that holiday (dark blue).

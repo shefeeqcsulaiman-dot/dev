@@ -480,6 +480,28 @@ body:not(.theme-light) .nbadge.red{background:var(--red);}
 /* ── BADGES ── */
 .b{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:500;}
 .b-g{background:var(--green-bg);color:var(--green);}
+/* Support tickets (openSupport, app.js) */
+.sup-btn{position:relative;display:inline-flex;align-items:center;gap:6px}
+.sup-badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ef4444;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}
+.sup-badge[hidden]{display:none}
+#m-support .modal{max-width:680px;width:100%}
+.sup-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto}
+.sup-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);cursor:pointer;text-align:left;width:100%;font:inherit;color:var(--text)}
+.sup-row:hover{border-color:var(--accent)}
+.sup-row.unread{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.sup-row b{font-size:13.5px}
+.sup-row small{display:block;font-size:11.5px;color:var(--text3);margin-top:2px}
+.sup-st{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.sup-st-open{background:var(--amber-bg);color:var(--amber)}
+.sup-st-in_progress{background:var(--accent-glow);color:var(--accent)}
+.sup-st-resolved{background:var(--green-bg);color:var(--green)}
+.sup-st-closed{background:var(--surface2);color:var(--text3)}
+.sup-thread{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow-y:auto;padding:4px 2px;margin:10px 0}
+.sup-msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.sup-msg.company{align-self:flex-end;background:var(--accent-glow);border:1px solid var(--accent)}
+.sup-msg.support{align-self:flex-start;background:var(--surface2);border:1px solid var(--border)}
+.sup-msg small{display:block;font-size:10.5px;color:var(--text3);margin-bottom:3px;white-space:normal}
+.sup-msg a{font-size:12px}
 .b-r{background:var(--red-bg);color:var(--red);}
 .b-a{background:var(--amber-bg);color:var(--amber);}
 .b-b{background:var(--accent-glow);color:var(--accent);}

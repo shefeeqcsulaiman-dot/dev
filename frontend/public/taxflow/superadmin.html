@@ -281,6 +281,11 @@
       Errors
       <span class="sb-badge" id="sb-badge-errors" style="display:none"></span>
     </div>
+    <div class="sb-item" data-page="support" onclick="saGo('support',this)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 9V8a5.5 5.5 0 0 1 11 0v1"/><rect x="2" y="9" width="2.6" height="4" rx="1"/><rect x="11.4" y="9" width="2.6" height="4" rx="1"/><path d="M12.7 13a2 2 0 0 1-2 2H9"/></svg>
+      Support Tickets
+      <span class="sb-badge" id="sb-badge-support" style="display:none"></span>
+    </div>
     <div class="sb-item" data-page="audit" onclick="saGo('audit',this)">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
       Audit Log
@@ -677,6 +682,42 @@
     <div id="sa-recycle-wrap"><div class="loading-state">Loading…</div></div>
   </div>
   </div><!-- /page-recycle -->
+
+  <div class="page-section" id="page-support">
+  <div class="card">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Support Tickets</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Tickets companies raise from the main app and HRMS (Support button). New messages are marked.</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="loadSupportTickets()">Refresh</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <select class="fi" id="sa-sup-status" style="max-width:170px" onchange="loadSupportTickets()"><option value="active">Open &amp; in progress</option><option value="">All</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+      <input class="fi" id="sa-sup-q" placeholder="Search subject, company or person…" style="max-width:260px" onkeydown="if(event.key==='Enter')loadSupportTickets()">
+    </div>
+    <div id="sa-sup-wrap"><div class="loading-state">Loading…</div></div>
+  </div>
+  </div><!-- /page-support -->
+
+  <div class="overlay" id="m-sa-ticket" onclick="if(event.target===this)closeModal('m-sa-ticket')">
+    <div class="modal" style="max-width:680px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="min-width:0"><div class="modal-title" id="sa-tk-title">Ticket</div><div class="modal-sub" id="sa-tk-sub"></div></div>
+        <button onclick="closeModal('m-sa-ticket')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;padding:0" title="Close">&times;</button>
+      </div>
+      <div id="sa-tk-thread" style="display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow-y:auto;margin:10px 0;padding:2px"></div>
+      <div id="sa-tk-err" class="err-msg"></div>
+      <textarea class="fi" id="sa-tk-reply" rows="3" maxlength="8000" placeholder="Reply to the company"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <input class="fi" id="sa-tk-file" type="file" accept="image/*,application/pdf" style="max-width:260px">
+        <span style="flex:1"></span>
+        <label style="font-size:12px;color:var(--muted)">Status</label>
+        <select class="fi" id="sa-tk-status" style="max-width:150px" onchange="setSupportStatus(this.value)"><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+      </div>
+      <div class="modal-foot"><button class="btn btn-g" onclick="closeModal('m-sa-ticket')">Close</button><button class="btn btn-p" id="sa-tk-send" onclick="sendSupportReply()">Send reply</button></div>
+    </div>
+  </div>
 
   <div class="page-section" id="page-trials">
   <!-- Trial Requests -->
@@ -1126,10 +1167,11 @@
     errors: ()=>{loadServerErrors();loadClientErrors();},
     trials: ()=>loadTrialRequests(),
     recycle: ()=>loadRecycleBin(),
+    support: ()=>loadSupportTickets(),
     renewals: ()=>loadRenewals(),
     health: ()=>{loadSystemHealth();loadJobHealth();loadImpersonationSessions();startLiveLoadPolling();loadTimeline();loadAlerts();},
   };
-  const SA_PAGE_TITLES={overview:'Overview',renewals:'Renewals',companies:'Companies',recycle:'Recycle Bin',analytics:'Usage Analytics',health:'System Health',errors:'Errors',audit:'Audit Log',trials:'Trial Requests'};
+  const SA_PAGE_TITLES={overview:'Overview',renewals:'Renewals',companies:'Companies',recycle:'Recycle Bin',support:'Support Tickets',analytics:'Usage Analytics',health:'System Health',errors:'Errors',audit:'Audit Log',trials:'Trial Requests'};
 
   function saApplyTheme(mode){
     const dark=mode==='dark';
@@ -1156,6 +1198,7 @@
   saGreeting();
 
   function saGo(page, el){
+    try{sessionStorage.setItem('sa_page',page);}catch(e){}   // a refresh reopens this page
     document.body.classList.remove('sb-open');
     const ttl=document.getElementById('sa-topbar-title');
     if(ttl)ttl.textContent=SA_PAGE_TITLES[page]||'Super Admin';
@@ -1186,6 +1229,7 @@
       await Promise.all([loadOverview(), loadCompaniesPage()]);
       loadPlatformHealth();
       loadRecycleBin();
+      refreshSupportBadge();
       loadActiveUsers();
       loadSaInsights();
       loadAlerts();
@@ -2615,6 +2659,76 @@
     finally{btn.disabled=false;btn.textContent='Delete permanently';}
   }
 
+  // ── Support tickets (GET/POST /superadmin/support/...) ──
+  const SA_SUP_STATUS={open:'Open',in_progress:'In progress',resolved:'Resolved',closed:'Closed'};
+  const SA_SUP_TONE={open:'#d97706',in_progress:'var(--primary)',resolved:'#16a34a',closed:'var(--muted)'};
+  let _saTicketId=null;
+  async function refreshSupportBadge(){
+    try{
+      const r=await apiFetch('/superadmin/support/unread'); if(!r.ok)return;
+      const n=(await r.json()).unread||0; const b=document.getElementById('sb-badge-support');
+      if(b){b.textContent=n;b.style.display=n?'':'none';}
+    }catch(e){}
+  }
+  async function loadSupportTickets(){
+    const wrap=document.getElementById('sa-sup-wrap'); if(!wrap)return;
+    const params=new URLSearchParams({status:document.getElementById('sa-sup-status').value,q:document.getElementById('sa-sup-q').value.trim()});
+    try{
+      const r=await apiFetch('/superadmin/support/tickets?'+params); if(!r.ok)throw new Error(await _saErrorText(r,'Could not load tickets'));
+      const rows=await r.json();
+      refreshSupportBadge();
+      if(!rows.length){wrap.innerHTML='<div style="font-size:12.5px;color:var(--muted)">No tickets here.</div>';return;}
+      wrap.innerHTML=`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Ticket</th><th>Company</th><th>Raised by</th><th>Category</th><th>Priority</th><th>Status</th><th>Last message</th></tr></thead><tbody>${rows.map(t=>`<tr style="cursor:pointer;${t.unread?'font-weight:700':''}" onclick="openSupportTicket('${escHtml(t.id)}')">
+        <td>${t.unread?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--primary);margin-right:6px"></span>':''}${escHtml(t.reference)} · ${escHtml(t.subject)}</td>
+        <td>${escHtml(t.company_name||'—')}</td><td>${escHtml(t.raised_by||'—')}<div style="font-size:11px;color:var(--muted);font-weight:400">${escHtml(t.raised_by_email||'')}</div></td>
+        <td>${escHtml(t.category)}</td><td style="color:${t.priority==='Urgent'||t.priority==='High'?'#e05252':'inherit'}">${escHtml(t.priority)}</td>
+        <td><b style="color:${SA_SUP_TONE[t.status]||'inherit'}">${SA_SUP_STATUS[t.status]||escHtml(t.status)}</b></td>
+        <td style="white-space:nowrap">${escHtml(new Date(t.last_message_at).toLocaleString())}</td></tr>`).join('')}</tbody></table></div>`;
+    }catch(err){wrap.innerHTML=`<div class="err-msg" style="display:block">${escHtml(err.message)}</div>`;}
+  }
+  async function openSupportTicket(id){
+    _saTicketId=id;
+    const r=await apiFetch('/superadmin/support/tickets/'+encodeURIComponent(id));
+    if(!r.ok){alert(await _saErrorText(r,'Could not open the ticket'));return;}
+    const t=await r.json();
+    document.getElementById('sa-tk-title').textContent=t.reference+' · '+t.subject;
+    document.getElementById('sa-tk-sub').textContent=`${t.company_name||''} · ${t.raised_by||''}${t.raised_by_email?' ('+t.raised_by_email+')':''} · ${t.category} · ${t.priority}`;
+    document.getElementById('sa-tk-status').value=t.status;
+    document.getElementById('sa-tk-reply').value=''; document.getElementById('sa-tk-file').value='';
+    document.getElementById('sa-tk-err').style.display='none';
+    const th=document.getElementById('sa-tk-thread');
+    th.innerHTML=t.messages.map(m=>{const mine=m.side==='support';return `<div style="max-width:85%;align-self:${mine?'flex-end':'flex-start'};padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;background:${mine?'rgba(37,99,235,.10)':'var(--surface2,#f1f5f9)'};border:1px solid ${mine?'rgba(37,99,235,.35)':'var(--border)'}"><div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;white-space:normal">${escHtml(mine?'ETaxFlow Support':(m.author||'Company'))} · ${escHtml(new Date(m.created_at).toLocaleString())}</div>${escHtml(m.body)}${m.has_attachment?`<div><a href="#" onclick="openSupportAttachment('${escHtml(m.id)}');return false">📎 ${escHtml(m.attachment_name||'Attachment')}</a></div>`:''}</div>`;}).join('');
+    openModal('m-sa-ticket'); th.scrollTop=th.scrollHeight;
+    loadSupportTickets();
+  }
+  async function openSupportAttachment(id){
+    const r=await apiFetch('/superadmin/support/messages/'+encodeURIComponent(id)+'/attachment');
+    if(!r.ok){alert('Could not open the attachment');return;}
+    const url=URL.createObjectURL(await r.blob()); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+  function sendSupportReply(){
+    const err=document.getElementById('sa-tk-err'); err.style.display='none';
+    const message=document.getElementById('sa-tk-reply').value.trim();
+    if(!message){err.textContent='Write a reply.';err.style.display='block';return;}
+    const input=document.getElementById('sa-tk-file'), f=input.files&&input.files[0];
+    const send=async(file)=>{
+      const btn=document.getElementById('sa-tk-send'); btn.disabled=true;
+      const r=await apiFetch('/superadmin/support/tickets/'+encodeURIComponent(_saTicketId)+'/messages',{method:'POST',body:JSON.stringify({message,attachment:file?file.data:null,attachment_name:file?file.name:null})});
+      btn.disabled=false;
+      if(!r.ok){err.textContent=await _saErrorText(r,'Could not send');err.style.display='block';return;}
+      openSupportTicket(_saTicketId);
+    };
+    if(!f){send(null);return;}
+    if(f.size>3*1024*1024){err.textContent='The file is too large (3 MB at most).';err.style.display='block';return;}
+    const rd=new FileReader(); rd.onload=()=>send({data:rd.result,name:f.name}); rd.readAsDataURL(f);
+  }
+  async function setSupportStatus(status){
+    const r=await apiFetch('/superadmin/support/tickets/'+encodeURIComponent(_saTicketId)+'/status',{method:'POST',body:JSON.stringify({status})});
+    if(!r.ok){alert(await _saErrorText(r,'Could not change the status'));return;}
+    loadSupportTickets();
+  }
+  setInterval(refreshSupportBadge,120000);
+
   async function loadTrialRequests(){
     const wrap=document.getElementById('sa-trials-wrap');
     wrap.innerHTML='<div class="loading-state"><span class="spinner"></span> Loading…</div>';
@@ -3558,6 +3672,8 @@
   }
 
   loadDashboard();
+  (function(){let p=null;try{p=sessionStorage.getItem('sa_page');}catch(e){}
+    if(p&&p!=='overview'&&document.getElementById('page-'+p))saGo(p);})();
   loadClientErrors();
   loadServerErrors();
   loadTrialRequests();

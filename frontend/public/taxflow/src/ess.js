@@ -327,6 +327,7 @@
     team: ['Team', 'Who is in today across your department']
   };
   function essTab(el, id) {
+    try { sessionStorage.setItem('ess_tab', id); } catch (e) {}   // a refresh reopens this tab
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
     document.querySelectorAll('.tab-body').forEach(t => t.classList.remove('on'));
     document.querySelectorAll('.ess-nav').forEach(t => t.removeAttribute('aria-current'));
@@ -3202,5 +3203,15 @@
   // voice and mobile code above is defined before showApp() uses it.
   (function(){
     essCompanyId();
-    if (localStorage.getItem(ESS_TOKEN_KEY)) showApp();
+    if (localStorage.getItem(ESS_TOKEN_KEY)) {
+      showApp();
+      var last = null;
+      try { last = sessionStorage.getItem('ess_tab'); } catch (e) {}
+      if (last && last !== 'dashboard' && document.getElementById('tb-' + last)) {
+        setTimeout(function() {
+          var nav = document.querySelector('.ess-nav.tab[onclick*="\'' + last + '\'"]');
+          if (nav) nav.click(); else essGoTab(last);
+        }, 300);
+      }
+    }
   })();

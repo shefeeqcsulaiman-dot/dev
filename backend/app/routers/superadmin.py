@@ -1242,6 +1242,12 @@ def purge_company(db: Session, company: Company) -> None:
     )
     db.query(Account).filter(Account.company_id == cid).delete(**s)
 
+    # Support tickets and their messages (routers/support.py)
+    from app.models import SupportMessage, SupportTicket
+    ticket_ids = db.query(SupportTicket.id).filter(SupportTicket.company_id == cid).subquery()
+    db.query(SupportMessage).filter(SupportMessage.ticket_id.in_(select(ticket_ids.c.id))).delete(**s)
+    db.query(SupportTicket).filter(SupportTicket.company_id == cid).delete(**s)
+
     # Tier 7 — Users, then Company
     db.query(User).filter(User.company_id == cid).delete(**s)
     db.delete(company)

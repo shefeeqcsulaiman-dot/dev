@@ -773,6 +773,107 @@ def cancel_leave_request(
     return _out(req, emp)
 
 
+# ── Leave booked from the rota (HRMS > Rota, Mark As: Leave) ────────────────────
+# Marking a rota day "Leave" used to be only a label: no request, no leave type, and the
+# balance never went down while the monthly report counted the day as leave. It now books
+# real, approved leave for that day through the same checks as any request.
+
+class RotaLeaveIn(BaseModel):
+    employee_no: str
+    date: date
+    leave_type: str = "Annual Leave"
+
+
+def _rota_employee(db: Session, principal: Principal, employee_no: str) -> Employee:
+    emp = db.query(Employee).filter(Employee.company_id == principal.company_id,
+                                    Employee.employee_no == employee_no.strip()).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    _assert_employee_branch_access(principal, emp)
+    return emp
+
+
+@router.post("/rota-book", response_model=LeaveRequestOut)
+def book_leave_from_rota(
+    payload: RotaLeaveIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("leave:edit")),
+) -> LeaveRequestOut:
+    """Approved leave for one rota day. The same leave already on that day is returned as
+    is; any other leave there is refused (it is changed in Leave)."""
+    if payload.leave_type not in _ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="Unrecognized leave type")
+    assert_leave_type_offered(db, principal.company_id, payload.leave_type)
+    emp = _rota_employee(db, principal, payload.employee_no)
+    if principal.kind == "employee" and principal.employee and principal.employee.id == emp.id:
+        raise HTTPException(status_code=403, detail="You cannot approve your own leave")
+    day = payload.date.isoformat()
+    existing = (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.company_id == principal.company_id, LeaveRequest.employee_id == emp.id,
+                LeaveRequest.status.in_(("pending", "approved")),
+                LeaveRequest.start_date <= day, LeaveRequest.end_date >= day)
+        .first()
+    )
+    if existing:
+        if existing.status == "approved" and existing.leave_type == payload.leave_type:
+            return _out(existing, emp)
+        raise HTTPException(
+            status_code=409,
+            detail=f"{emp.full_name} already has {existing.status} {existing.leave_type} on this day "
+                   f"({existing.start_date} to {existing.end_date}). Change it in Leave.",
+        )
+    days = leave_request_days(db, principal.company_id, emp.employee_no, payload.leave_type, payload.date, payload.date)
+    assert_leave_available(db, principal.company_id, emp, payload.leave_type, payload.date, days)
+    req = LeaveRequest(
+        company_id=principal.company_id, employee_id=emp.id, leave_type=payload.leave_type,
+        start_date=day, end_date=day, days=days, reason="Booked from the rota", status="approved",
+    )
+    _set_approver(req, principal)
+    req.approved_at = datetime.now(timezone.utc)
+    db.add(req)
+    db.commit()
+    return _out(req, emp)
+
+
+class RotaUnbookIn(BaseModel):
+    employee_no: str
+    date: date
+
+
+@router.post("/rota-unbook")
+def unbook_leave_from_rota(
+    payload: RotaUnbookIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("leave:edit")),
+) -> dict:
+    """The rota day is no longer leave: one-day leave on it is cancelled (kept on record, the
+    day goes back to the balance). Leave spanning several days is not cut from the rota."""
+    emp = _rota_employee(db, principal, payload.employee_no)
+    day = payload.date.isoformat()
+    req = (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.company_id == principal.company_id, LeaveRequest.employee_id == emp.id,
+                LeaveRequest.status.in_(("pending", "approved")),
+                LeaveRequest.start_date <= day, LeaveRequest.end_date >= day)
+        .first()
+    )
+    if not req:
+        return {"ok": True, "cancelled": None}
+    if req.start_date[:10] != day or req.end_date[:10] != day:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This day is part of {req.leave_type} from {req.start_date} to {req.end_date}. Change or cancel it in Leave.",
+        )
+    req.status = "cancelled"
+    req.cancelled_at = datetime.now(timezone.utc)
+    req.cancelled_by = principal.display_name or ("HR" if principal.kind == "user" else "HRMS user")
+    req.cancel_reason = "Removed from the rota"
+    db.add(req)
+    db.commit()
+    return {"ok": True, "cancelled": req.id}
+
+
 @router.delete("/requests/{request_id}", status_code=204, response_model=None)
 def delete_leave_request(
     request_id: str,

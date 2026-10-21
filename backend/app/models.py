@@ -1896,6 +1896,42 @@ class TrialRequest(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="new")
 
 
+class SupportTicket(Base, TimestampMixin):
+    """A support ticket a company user raised to the platform team (Super Admin > Support
+    Tickets). The conversation is in support_messages."""
+    __tablename__ = "support_tickets"
+    __table_args__ = (Index("ix_support_tickets_company_updated", "company_id", "updated_at"),
+                      Index("ix_support_tickets_status_updated", "status", "updated_at"))
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), default="Question")
+    priority: Mapped[str] = mapped_column(String(20), default="Normal")
+    status: Mapped[str] = mapped_column(String(20), default="open")   # open / in_progress / resolved / closed
+    raised_by_name: Mapped[str | None] = mapped_column(String(160))
+    raised_by_email: Mapped[str | None] = mapped_column(String(255))
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Who has a reply they have not opened yet.
+    unread_company: Mapped[bool] = mapped_column(Boolean, default=False)
+    unread_support: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+    __table_args__ = (Index("ix_support_messages_ticket", "ticket_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("support_tickets.id"), nullable=False)
+    side: Mapped[str] = mapped_column(String(10), nullable=False)        # "company" or "support"
+    author_name: Mapped[str | None] = mapped_column(String(160))
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    attachment: Mapped[str | None] = mapped_column(Text)                  # data URL, photo or PDF
+    attachment_name: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 
 # Registers the session hooks that keep AppDataRecord.amount_paid current (needs AppDataRecord above).
 import app.doc_index  # noqa: E402,F401

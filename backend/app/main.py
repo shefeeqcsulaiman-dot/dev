@@ -38,7 +38,7 @@ from app.company_defaults import seed_accounts, seed_tax_codes, seed_voucher_typ
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Company, User
-from app.routers import accounting, ai, ai_voice, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, ess_voice, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, registers, reports, source_transactions, stock_feed, superadmin, tax
+from app.routers import accounting, ai, ai_voice, app_data, attendance, audit, auth, branches, companies, corporate_accounting, documents, ess, ess_voice, events, exception_center, hr_access, hr_ai, inventory, invoice_share, invoices, jobs, leave, module_records, payroll, registers, reports, source_transactions, stock_feed, superadmin, support, tax
 from app.security import hash_password
 
 
@@ -355,7 +355,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-21.3"
+    BUILD = "2026-10-21.4"
     globals()["_LIVE_BUILD"] = BUILD
 
     def monitoring_sentry_on() -> bool:
@@ -568,6 +568,7 @@ def create_app() -> FastAPI:
     app.include_router(hr_access.router, prefix="/api/v1")
     app.include_router(hr_access.gated_router, prefix="/api/v1")
     app.include_router(leave.router, prefix="/api/v1")
+    app.include_router(support.router, prefix="/api/v1")
 
     # Serve frontend static files
     if static_dir.exists():

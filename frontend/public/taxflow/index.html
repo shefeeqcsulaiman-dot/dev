@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with hrms.html — keep the ?v= query in both files in sync when either changes. -->
-<link rel="preload" href="src/styles.css?v=3c995fb0ee" as="style">
-<link rel="preload" href="src/app.js?v=ce7d5812fb" as="script">
+<link rel="preload" href="src/styles.css?v=6449be2bf5" as="style">
+<link rel="preload" href="src/app.js?v=f6db20fe5c" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="src/styles.css?v=3c995fb0ee">
+<link rel="stylesheet" href="src/styles.css?v=6449be2bf5">
 <script>if(!localStorage.getItem('taxflow_token')){window.location.replace('/login');}</script>
 </head>
 <body class="theme-light">
@@ -165,6 +165,7 @@
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="flex-shrink:0;opacity:.6"><path d="M4 2v12M12 2v12M4 5h8M4 11h8"/></svg>
         <select class="fi" style="padding:5px 8px;font-size:12px;width:auto" onchange="switchActiveBranch(this.value)"></select>
       </div>
+      <button class="btn btn-g sup-btn" id="support-btn" type="button" onclick="openSupport()" title="Support: raise a ticket to the ETaxFlow team"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19a3 3 0 0 1-3 3h-3"/></svg><span>Support</span><span class="sup-badge" id="support-badge" hidden></span></button>
       <button class="btn btn-g" id="theme-menu-toggle" onclick="toggleNightMode(document.body.classList.contains('theme-light'))">☾ Dark Mode</button>
       <button type="button" class="btn btn-g vc-mic" id="vc-mic-btn" data-module-gate="ai" onclick="toggleVoiceCommand()" title="Voice command (Ctrl+Space)" aria-label="Voice command" aria-pressed="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></button>
       <button class="btn btn-g" data-module-gate="ai" onclick="go('ai')">AI Assistant</button>
@@ -5373,6 +5374,7 @@ period_locks ─&lt; audit_logs
     <div class="fg"><label class="fl">Shift Type</label><select class="fi" id="rota-edit-type" onchange="applyRotaEditTypeDefaults()"><option>Morning</option><option>Evening</option><option>Night</option><option>Off</option><option>Leave</option><option>Overtime</option></select></div>
     <div class="fr3"><div class="fg"><label class="fl">Start Time</label><input class="fi mono" id="rota-edit-start" type="time" value="09:00"></div><div class="fg"><label class="fl">End Time</label><input class="fi mono" id="rota-edit-end" type="time" value="18:00"></div><div class="fg"><label class="fl">Break Minutes</label><input class="fi mono" id="rota-edit-break" value="60"></div></div>
     <div class="fg"><label class="fl">Mark As</label><select class="fi" id="rota-edit-mark"><option>Shift</option><option>Off</option><option>Leave</option><option value="OT">Extra shift</option><option>Holiday</option><option>Training</option></select><div class="fh" id="rota-edit-extra-hint" style="display:none;font-size:11.5px;color:var(--text3);margin-top:4px">Every hour worked on an extra shift counts as overtime.</div></div>
+    <div class="fg" id="rota-edit-leave-wrap" style="display:none"><label class="fl">Leave Type</label><select class="fi" id="rota-edit-leave-type"></select><div class="fh" style="font-size:11.5px;color:var(--text3);margin-top:4px">Books approved leave for this day: it uses the employee's leave balance and shows in Leave and ESS. Changing the day back cancels it.</div></div>
     <div class="fg"><label class="fl">Notes</label><textarea class="fi" id="rota-edit-notes" rows="3" placeholder="Optional rota note"></textarea></div>
     <div class="modal-foot"><button class="btn btn-danger" onclick="removeRotaCellShift()">Remove Shift</button><button class="btn btn-g" onclick="closeM('m-edit-shift')">Cancel</button><button class="btn btn-p" onclick="saveRotaCellShift()">Save</button></div>
   </div>
@@ -5790,6 +5792,6 @@ period_locks ─&lt; audit_logs
      order relative to app.js's own defer, so config.js still runs first. -->
 <script src="config.js" defer></script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=ce7d5812fb" defer></script>
+<script src="src/app.js?v=f6db20fe5c" defer></script>
 </body>
 </html>
