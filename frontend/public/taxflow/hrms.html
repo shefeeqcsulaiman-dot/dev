@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Note: src/app.js and src/styles.css are shared with index.html — keep the ?v= query in both files in sync when either changes. -->
 <link rel="preload" href="src/styles.css?v=3c995fb0ee" as="style">
-<link rel="preload" href="src/app.js?v=666d60a819" as="script">
+<link rel="preload" href="src/app.js?v=ce7d5812fb" as="script">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css?v=3c995fb0ee">
 <style>
@@ -1749,6 +1749,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <th style="width:100px">Applies To</th>
               <th style="width:60px">Encash</th>
               <th style="width:60px">Carry Fwd</th>
+              <th style="width:60px" title="Yes: the whole year's Annual Leave is available from the start of the leave year (shown in ESS and HRMS), instead of being earned month by month">Flexible</th>
               <th style="width:40px"></th>
             </tr>
           </thead>
@@ -1760,6 +1761,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><span style="font-size:12px">All Staff</span></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
             <tr data-policy-value="UAE Standard">
@@ -1767,6 +1769,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
               <td><span style="font-size:12px">Probation / &lt;1 yr</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
@@ -1778,6 +1781,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><span style="font-size:12px">Operations</span></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
             <tr data-policy-value="Executive 30 Working">
@@ -1787,6 +1791,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><span style="font-size:12px">Management</span></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
             <tr data-policy-value="Contractor">
@@ -1794,6 +1799,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="14"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
               <td><span style="font-size:12px">Contractors</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
@@ -1810,6 +1816,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><span style="font-size:12px">Operations</span></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Yes</option><option>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
             <tr data-policy-value="Part-Time">
@@ -1819,6 +1826,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><span style="font-size:12px">Part-Time Staff</span></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
             </tr>
             <tr data-policy-value="Custom">
@@ -1826,6 +1834,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <td><input class="fi mono" style="width:80px;padding:3px 6px" value="21"></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option selected>Calendar</option><option>Working</option></select></td>
               <td><span style="font-size:12px">Case-by-case</span></td>
+              <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><select class="fi" style="padding:3px 4px;font-size:12px"><option>Yes</option><option selected>No</option></select></td>
               <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>
@@ -3319,7 +3328,7 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
 window.HRMS_STANDALONE=true;
 </script>
 <script src="src/voice.js?v=54b0d66150" defer></script>
-<script src="src/app.js?v=666d60a819" defer></script>
+<script src="src/app.js?v=ce7d5812fb" defer></script>
 <script>
 function hrsTab(section){
   document.querySelectorAll('.hrs-section').forEach(function(el){el.classList.remove('hrs-visible');});

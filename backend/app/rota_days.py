@@ -109,7 +109,7 @@ def rota_break_seconds(db: Session, company_id: str, employee_nos, start: date, 
                                                      RotaRecord.code, RotaRecord.break_minutes):
         if kind != "shift":
             continue
-        code = code or ""
+        code = (code or "").upper()   # Shift Setup codes are keyed upper-case
         if mins is None:
             mins = shifts.get(code, _DEFAULT_BREAK_MINUTES.get(code, 0))
         if mins:

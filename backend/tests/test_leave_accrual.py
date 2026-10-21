@@ -157,3 +157,28 @@ def test_next_year_leave_can_use_next_years_whole_entitlement(client, db, auth_h
         assert r.status_code == 400 and "available" in r.json()["detail"]   # 10 + 25 > 30 for the year
     finally:
         _settings(client, auth_headers)
+
+
+def test_flexible_policy_gives_the_whole_year_at_once(client, db, auth_headers):
+    """Named Leave Policies > Flexible = Yes: the whole leave year's Annual Leave is available
+    from its start (shown in HRMS and ESS) instead of being earned month by month; someone who
+    joined this year gets the rest of the year's share at once."""
+    cid = _company_id(client, auth_headers)
+    _settings(client, auth_headers, accrual="Monthly (1/12 per month)", year_start="January",
+              leave_policies=[{"value": "UAE 30 Calendar", "days": 30, "basis": "Calendar", "flexible": "No"},
+                              {"value": "Flexi 30", "days": 30, "basis": "Calendar", "flexible": "Yes"}])
+    today = date.today()
+    jan = date(today.year, 1, 1).isoformat()
+    steady = _employee(client, db, auth_headers, cid, leave_policy="UAE 30 Calendar", join_date=jan)
+    flexi = _employee(client, db, auth_headers, cid, leave_policy="Flexi 30", join_date=jan)
+    joined_now = date(today.year, today.month, 1)
+    newcomer = _employee(client, db, auth_headers, cid, leave_policy="Flexi 30", join_date=joined_now.isoformat())
+    try:
+        bal = {b["employee_id"]: b for b in client.get("/api/v1/leave/balance", headers=auth_headers).json()}
+        assert bal[steady.id]["annual_entitlement"] == accrued_days({"accrual": "Monthly"}, 30, date(today.year, 1, 1), today)
+        assert bal[flexi.id]["annual_entitlement"] == 30
+        months_left = 12 - today.month + 1
+        expected = round(30 * months_left / 12 * 2) / 2
+        assert bal[newcomer.id]["annual_entitlement"] == (int(expected) if float(expected).is_integer() else expected)
+    finally:
+        _settings(client, auth_headers)

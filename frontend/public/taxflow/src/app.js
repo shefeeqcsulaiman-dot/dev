@@ -20772,6 +20772,7 @@ function saveLeavePolicies(){
       basis:cells[1]?.value||'Calendar',
       encash:cells[2]?.value||'No',
       carry_forward:cells[3]?.value||'No',
+      flexible:cells[4]?.value||'No',
     };
   });
   const yearStart=document.getElementById('leave-year-start')?.value||'January';
@@ -20832,8 +20833,13 @@ async function loadLeavePoliciesFromServer(){
       if(!p.value)return;
       const row=document.querySelector(`#leave-policies-tbody tr[data-policy-value="${CSS.escape(p.value)}"]`);
       if(row){
-        const daysInput=row.querySelector('input');
-        if(daysInput&&p.days!=null&&p.days!=='')daysInput.value=p.days;
+        // Built-in rows: every saved column (only the days used to come back after a reload).
+        const cells=[...row.querySelectorAll('input,select')];
+        if(cells[0]&&p.days!=null&&p.days!=='')cells[0].value=p.days;
+        if(cells[1]&&p.basis)cells[1].value=p.basis;
+        if(cells[2]&&p.encash)cells[2].value=p.encash;
+        if(cells[3]&&p.carry_forward)cells[3].value=p.carry_forward;
+        if(cells[4])cells[4].value=p.flexible==='Yes'?'Yes':'No';
         return;
       }
       // A custom policy (added via addLeavePolicy(), not one of the
@@ -20845,7 +20851,7 @@ async function loadLeavePoliciesFromServer(){
       if(!tbody||!p.name)return;
       const tr=document.createElement('tr');
       tr.dataset.policyValue=p.value;
-      tr.innerHTML=_leavePolicyRowHtml(p.name,p.days,p.basis,p.encash,p.carry_forward);
+      tr.innerHTML=_leavePolicyRowHtml(p.name,p.days,p.basis,p.encash,p.carry_forward,p.flexible);
       tbody.appendChild(tr);
     });
     // Same gap existed for Leave Types & Entitlements — this table always
@@ -20882,7 +20888,7 @@ async function loadLeavePoliciesFromServer(){
 // this table on every reload, since the load function only ever patched
 // EXISTING rows' day counts and never re-created rows for ones it didn't
 // find).
-function _leavePolicyRowHtml(name,days,basis,encash,carryForward){
+function _leavePolicyRowHtml(name,days,basis,encash,carryForward,flexible){
   const sel=(opts,current)=>opts.map(o=>`<option${o===current?' selected':''}>${o}</option>`).join('');
   return `
     <td><strong>${escapeHtml(name)}</strong></td>
@@ -20891,6 +20897,7 @@ function _leavePolicyRowHtml(name,days,basis,encash,carryForward){
     <td><span style="font-size:12px">All Staff</span></td>
     <td><select class="fi" style="padding:3px 4px;font-size:12px">${sel(['Yes','No'],encash||'No')}</select></td>
     <td><select class="fi" style="padding:3px 4px;font-size:12px">${sel(['Yes','No'],carryForward||'No')}</select></td>
+    <td><select class="fi" style="padding:3px 4px;font-size:12px" title="Whole year's Annual Leave available from the start of the leave year">${sel(['Yes','No'],flexible||'No')}</select></td>
     <td><button class="btn btn-g btn-xs" onclick="this.closest('tr').remove();toast('Policy removed','ok')">×</button></td>`;
 }
 
@@ -22597,7 +22604,9 @@ function openRotaCellEditor(cell){
   if(typeSel&&![...typeSel.options].some(o=>o.value===type))typeSel.value='';
   setFieldValue(document.getElementById('rota-edit-start'),start&&start!=='-'?start:'');
   setFieldValue(document.getElementById('rota-edit-end'),end&&end!=='-'?end:'');
-  setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??ROTA_EDIT_DEFAULTS[type]?.break_minutes??60));
+  // The day's own break, else its shift's break from Shift Setup (0 = no break), else the default.
+  const setupBreak=shiftForCode?(shiftForCode.break_minutes??shiftForCode.break):undefined;
+  setFieldValue(document.getElementById('rota-edit-break'),String(assignment?.break_minutes??(setupBreak!==undefined&&setupBreak!==''?Number(setupBreak)||0:undefined)??ROTA_EDIT_DEFAULTS[type]?.break_minutes??0));
   setSelectValue(document.getElementById('rota-edit-mark'),assignment?.mark||ROTA_EDIT_DEFAULTS[type]?.mark||'Shift');
   {const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=document.getElementById('rota-edit-mark')?.value==='OT'?'':'none';}
   setFieldValue(document.getElementById('rota-edit-notes'),assignment?.notes||'');
@@ -22736,7 +22745,8 @@ function applyRotaEditTypeDefaults(){
     const shift=JSON.parse(shiftRow.dataset.shift);
     setFieldValue(document.getElementById('rota-edit-start'),shift.start||'');
     setFieldValue(document.getElementById('rota-edit-end'),shift.end||'');
-    setFieldValue(document.getElementById('rota-edit-break'),String(shift.break_minutes||60));
+    // ?? not ||: a shift set up with no break (0) used to be filled in as 60.
+    setFieldValue(document.getElementById('rota-edit-break'),String(Number(shift.break_minutes??shift.break??0)||0));
     setSelectValue(document.getElementById('rota-edit-mark'),'Shift');
     return;
   }

@@ -108,6 +108,9 @@ def _effective_leave_policy_configs(db: Session, company_id: str) -> dict[str, d
             basis = str(entry.get("basis") or "").strip()
             if basis in ("Calendar", "Working"):
                 cfg["basis"] = basis
+            # Flexible: the whole year's Annual Leave is available from the start of the
+            # leave year instead of being earned month by month (leave_entitlement()).
+            cfg["flexible"] = str(entry.get("flexible") or "").strip().lower() == "yes"
     return configs
 
 
@@ -878,9 +881,10 @@ def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type
     caps = _leave_type_caps(db, company_id)
     if leave_type == "Annual Leave":
         profiles = _employee_profiles(db, company_id)
+        policy_configs = _effective_leave_policy_configs(db, company_id)
         yearly = _leave_entitlement_days(
             employee_no, {k: v["policy"] for k, v in profiles.items() if v["policy"]},
-            _effective_leave_policy_configs(db, company_id), default_days=caps.get("Annual Leave", 21),
+            policy_configs, default_days=caps.get("Annual Leave", 21),
         )
         settings = _leave_settings(db, company_id)
         prof = profiles.get(employee_no) or {}
@@ -888,9 +892,11 @@ def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type
         # Leave in a later leave year (booked in advance) may use that year's whole
         # entitlement -- what will have been earned by the end of that year -- rather than
         # only the days earned by its start date (a January holiday booked in December).
+        # A Flexible policy gets the whole year's days at the start of every leave year.
         until = on
         window = leave_year_window(settings, prof.get("join_date"), on)
-        if window[0] > leave_year_window(settings, prof.get("join_date"), date.today())[0]:
+        flexible = bool((policy_configs.get(prof.get("policy") or "") or {}).get("flexible"))
+        if flexible or window[0] > leave_year_window(settings, prof.get("join_date"), date.today())[0]:
             until = window[1] - timedelta(days=1)
         earned = accrued_days(settings, yearly, prof.get("join_date"), until)
         if prof.get("carry"):
@@ -1031,7 +1037,11 @@ def leave_balances(db: Session, company_id: str, employees: list[Employee], on: 
         for leave_type, cap in caps.items():
             carry = None
             if leave_type == "Annual Leave":
-                ent, year_ent = accrued_days(settings, yearly, prof.get("join_date"), on), yearly
+                # Flexible policy: the whole leave year's days at once (as leave_entitlement()).
+                earn_until = on
+                if (configs.get(prof.get("policy") or "") or {}).get("flexible") and e.id in windows:
+                    earn_until = date.fromisoformat(windows[e.id][1]) - timedelta(days=1)
+                ent, year_ent = accrued_days(settings, yearly, prof.get("join_date"), earn_until), yearly
                 if prof.get("carry"):
                     window = (date.fromisoformat(windows[e.id][0]), date.fromisoformat(windows[e.id][1]))
                     deadline = carry_forward_days(settings, prof, window, window[1])[2]

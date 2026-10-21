@@ -146,3 +146,27 @@ def test_extra_shift_overtime_is_paid_in_payroll_without_a_request(client, db, a
     expected = (Decimal(str(worked)) * Decimal("5000") / Decimal("176") * Decimal("1.25")).quantize(Decimal("0.01"))
     assert abs(Decimal(str(items[emp.id]["overtime"])) - expected) <= Decimal("0.01"), (items[emp.id], expected)
     assert Decimal(str(items[other.id]["overtime"])) == 0   # HR rejected that day's request
+
+
+def test_shift_setup_break_is_used_whatever_the_code_case(client, db, auth_headers):
+    """A rota day saved with a lower-case custom code still takes its Shift Setup break
+    (0 here), not the 60-minute default; M with nothing saved still defaults to 60."""
+    from datetime import date
+
+    from app.rota_days import rota_break_seconds
+
+    cid = _company_id(client, auth_headers)
+    tag = uuid.uuid4().hex[:4].upper()
+    _seed_app_record(db, cid, "rotaShifts", f"shift-nb{tag}", {"id": f"shift-nb{tag}", "name": "No Break", "code": f"NB{tag}",
+                                                                 "start": "08:00", "end": "14:00", "break_minutes": 0})
+    emp = _employee(db, cid, uuid.uuid4().hex[:6])
+    _seed_app_record(db, cid, "rotaAssignments", f"{emp.employee_no}-{DAY}", {
+        "id": f"{emp.employee_no}-{DAY}", "employee_id": emp.employee_no, "date": DAY, "code": f"nb{tag}".lower(),
+        "type": "No Break", "start": "08:00", "end": "14:00", "mark": "Shift"})
+    other = _employee(db, cid, uuid.uuid4().hex[:6])
+    _seed_app_record(db, cid, "rotaAssignments", f"{other.employee_no}-{DAY}", {
+        "id": f"{other.employee_no}-{DAY}", "employee_id": other.employee_no, "date": DAY, "code": "M",
+        "type": "Morning", "start": "08:00", "end": "17:00", "mark": "Shift"})
+    got = rota_break_seconds(db, cid, [emp.employee_no, other.employee_no], date(2026, 7, 15), date(2026, 7, 15))
+    assert (emp.employee_no, DAY) not in got            # 0 minutes: no break deducted
+    assert got[(other.employee_no, DAY)] == 3600        # M without a saved break: the 60-minute default
