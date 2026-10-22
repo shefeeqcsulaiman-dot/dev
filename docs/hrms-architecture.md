@@ -654,6 +654,19 @@ it can actually use. Wrapped in try/catch that fails open to the old
 `hrms.html` redirect if `/hr/me` is unreachable, so a transient network
 error can't strand a legitimate HR user on a login screen.
 
+**Mobile app refresh tokens (2026-10-22)** — the Android ESS app's automatic GPS
+check-in/out runs with the app closed, which the 24h no-renewal access token
+(`ACCESS_TOKEN_EXPIRE_MINUTES`) would stop a day after sign-in. `POST /ess/login`
+with `remember_device: true` also returns a `refresh_token` (the web portal never
+asks, so it gets `null`); `POST /ess/refresh` trades it for a new access token and
+`POST /ess/logout` revokes it. Only its SHA-256 is stored (`ess_refresh_tokens`,
+migration 0050). It stops working when revoked, after 90 days unused, when the
+password changes after it was issued (`Employee.password_changed_at`, now also set
+by `/ess/change-password`, which hands the calling device a replacement), when
+portal access is revoked (`password_hash` cleared) or switched off
+(`assert_employee_may_sign_in`), or when ESS is disabled for the company. Not
+included in backups (sign-in data never is). Tests: `test_ess_refresh_tokens.py`.
+
 Leave requests ARE submittable from ESS (2026-09-02) — `POST /ess/leave`
 mirrors `POST /leave/requests`'s validation (allowed types, no
 overlapping pending/approved request) but always targets the token's own

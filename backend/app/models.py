@@ -1841,6 +1841,25 @@ class EmployeeLocationLog(Base, TimestampMixin):
     battery: Mapped[int | None] = mapped_column(Integer)
 
 
+class EssRefreshToken(Base, TimestampMixin):
+    """A long-lived ESS sign-in for the mobile app, exchanged for 24h access tokens at
+    POST /ess/refresh so automatic GPS check-in keeps working with the app closed. Only the
+    token's SHA-256 is stored. It stops working when revoked (sign-out), after
+    ESS_REFRESH_IDLE_DAYS unused, when the employee's password changes after it was issued,
+    or whenever their sign-in is switched off (assert_employee_may_sign_in)."""
+    __tablename__ = "ess_refresh_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), index=True, nullable=False)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    device: Mapped[str | None] = mapped_column(String(120))
+    # Set from Python (not server_default) so it compares exactly with password_changed_at.
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class LeaveRequest(Base, TimestampMixin):
     __tablename__ = "leave_requests"
     __table_args__ = (Index("ix_leave_requests_company_employee", "company_id", "employee_id"),)

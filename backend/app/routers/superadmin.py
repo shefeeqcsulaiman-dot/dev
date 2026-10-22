@@ -31,7 +31,7 @@ from app.models import (
     Branch, CashFlowForecastRecord, ClientError, Company, CompanyLocation,
     ConsolidationRecord, CorporateTaxRecord, CorporateTaxReturn, CostCenterRecord,
     CreditControlRecord, CustomerAgingSnapshot, DailyGlBalance, Document,
-    DomainEvent, Employee, EmployeeBranchAccess, EmployeeLocation, EmployeeLocationLog, EventOutbox,
+    DomainEvent, Employee, EmployeeBranchAccess, EmployeeLocation, EmployeeLocationLog, EssRefreshToken, EventOutbox,
     EventProcessingLog, ExceptionEvent, FixedAssetRecord, GeneralLedgerEntry,
     ImpersonationSession, InventoryBalanceSnapshot, InventoryValuationLayer, Invoice, InvoiceLine,
     ItemUnit, ItemUnitConversion, Job, JobStatus, JournalEntry, JournalLine, LeaveRequest,
@@ -1147,6 +1147,7 @@ def purge_company(db: Session, company: Company) -> None:
     # attendance, roles, or leave — surfaced as a generic "An internal
     # error occurred" with no useful detail.
     db.query(EmployeeLocationLog).filter(EmployeeLocationLog.company_id == cid).delete(**s)
+    db.query(EssRefreshToken).filter(EssRefreshToken.company_id == cid).delete(**s)
     db.query(LeaveRequest).filter(LeaveRequest.company_id == cid).delete(**s)
     db.query(AttendanceSession).filter(AttendanceSession.company_id == cid).delete(**s)
     emp_ids = db.query(Employee.id).filter(Employee.company_id == cid).subquery()

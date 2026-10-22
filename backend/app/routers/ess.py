@@ -25,7 +25,7 @@ from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
 from app.rota_days import rota_day_statuses
-from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, LeaveRequest, PayrollItem, PayrollRun, Role, RotaRecord
+from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, EssRefreshToken, LeaveRequest, PayrollItem, PayrollRun, Role, RotaRecord
 from app.routers.attendance import _company_offset, _ot_cooloff_seconds, overtime_eligibility_rows, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
     _ALLOWED_TYPES,
@@ -63,11 +63,19 @@ class EssLoginRequest(BaseModel):
     # logging in with employee_no, which is only unique *within* a company —
     # without it, "Employee #1" at two unrelated companies would collide.
     company_id: str | None = None
+    # The mobile app asks for a refresh token too (POST /ess/refresh); the web portal doesn't.
+    remember_device: bool = False
+    device: str | None = None
 
 
 class EssToken(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    refresh_token: str | None = None
+
+
+class EssRefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class EssEmployeeOut(BaseModel):
@@ -98,6 +106,8 @@ class EssEmployeeOut(BaseModel):
 class EssChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+    # The mobile app's refresh token, so this device stays signed in (see ess_change_password()).
+    refresh_token: str | None = None
 
 
 class EssTeamMemberOut(BaseModel):
@@ -213,7 +223,76 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
     expires_at = db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar()
     assert_company_active(expires_at)
 
-    return EssToken(access_token=_create_ess_token(emp.id))
+    refresh = _issue_refresh_token(db, emp, payload.device) if payload.remember_device else None
+    return EssToken(access_token=_create_ess_token(emp.id), refresh_token=refresh)
+
+
+# ── mobile app refresh tokens ────────────────────────────────────────────────
+#
+# Access tokens last ACCESS_TOKEN_EXPIRE_MINUTES (24h in production) with no renewal, which
+# would stop the app's automatic GPS check-in a day after sign-in. The app keeps a refresh
+# token instead and trades it here for a new access token whenever one expires.
+
+ESS_REFRESH_IDLE_DAYS = 90
+_REFRESH_INVALID = "Your sign-in has expired. Please sign in again."
+
+
+def _hash_refresh(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+def _refresh_row(db: Session, token: str) -> EssRefreshToken | None:
+    return db.query(EssRefreshToken).filter(EssRefreshToken.token_hash == _hash_refresh(token.strip())).first()
+
+
+def _issue_refresh_token(db: Session, emp: Employee, device: str | None) -> str:
+    token = secrets.token_urlsafe(48)
+    now = datetime.now(UTC)
+    db.add(EssRefreshToken(
+        company_id=emp.company_id, employee_id=emp.id, token_hash=_hash_refresh(token),
+        device=(device or "").strip()[:120] or None, issued_at=now, last_used_at=now,
+    ))
+    db.commit()
+    return token
+
+
+@router.post("/refresh", response_model=EssToken)
+@limiter.limit("30/minute")
+def ess_refresh(request: Request, payload: EssRefreshRequest, db: Session = Depends(get_db)) -> EssToken:
+    """A new access token for a remembered device. Same checks as /ess/login, minus the
+    password: the employee must still be allowed to sign in, the company active and on ESS."""
+    row = _refresh_row(db, payload.refresh_token)
+    now = datetime.now(UTC)
+    if not row or row.revoked_at is not None or now - _aware(row.last_used_at) > timedelta(days=ESS_REFRESH_IDLE_DAYS):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_REFRESH_INVALID)
+    emp = db.query(Employee).filter(Employee.id == row.employee_id, Employee.company_id == row.company_id).first()
+    changed = _aware(emp.password_changed_at) if emp else None
+    if not emp or not emp.password_hash or (changed and changed > _aware(row.issued_at)):
+        # Portal access revoked, or the password changed since this device signed in.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_REFRESH_INVALID)
+    assert_employee_may_sign_in(emp, "Portal access has been disabled for this account")
+    modules_enabled = db.query(Company.modules_enabled).filter(Company.id == emp.company_id).scalar()
+    if not company_allows_module(modules_enabled, "ess"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="The ESS portal is not enabled for your company")
+    assert_company_active(db.query(Company.subscription_expires_at).filter(Company.id == emp.company_id).scalar())
+    row.last_used_at = now
+    db.commit()
+    return EssToken(access_token=_create_ess_token(emp.id), refresh_token=payload.refresh_token)
+
+
+@router.post("/logout")
+def ess_logout(payload: EssRefreshRequest, db: Session = Depends(get_db)) -> dict:
+    """Signing out of the app revokes its refresh token. Holding the token is the proof, so
+    no access token is needed (it may already have expired)."""
+    row = _refresh_row(db, payload.refresh_token)
+    if row and row.revoked_at is None:
+        row.revoked_at = datetime.now(UTC)
+        db.commit()
+    return {"ok": True}
 
 
 @router.get("/me", response_model=EssEmployeeOut)
@@ -637,9 +716,19 @@ def ess_change_password(
     if len(payload.new_password) < 6:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters")
     emp.password_hash = pwd_context.hash(payload.new_password)
+    # Every remembered device signs in again with the new password -- except this one,
+    # if it sent its refresh token: it gets a fresh one so its automatic check-in keeps going.
+    now = datetime.now(UTC)
+    emp.password_changed_at = now
     db.add(emp)
     db.commit()
-    return {"ok": True}
+    new_refresh = None
+    if payload.refresh_token:
+        old = _refresh_row(db, payload.refresh_token)
+        if old and old.employee_id == emp.id and old.revoked_at is None:
+            old.revoked_at = now
+            new_refresh = _issue_refresh_token(db, emp, old.device)
+    return {"ok": True, "refresh_token": new_refresh}
 
 
 @router.get("/attendance")
