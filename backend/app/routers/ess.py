@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import logging
 import re
 import secrets
 from calendar import monthrange
@@ -8,10 +9,11 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 import jwt
 from jwt import PyJWTError as JWTError
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -46,6 +48,7 @@ from app.routers.leave import (
 from app.security import pwd_context, verify_employee_password
 
 router = APIRouter(prefix="/ess", tags=["ess"])
+_log = logging.getLogger("taxflow")
 settings = get_settings()
 
 _ESS_PREFIX = "emp:"
@@ -707,8 +710,8 @@ def ess_payslips(request: Request, db: Session = Depends(get_db)) -> list:
 
 
 def _leave_can_cancel(r: LeaveRequest, today: str) -> bool:
-    """Same rule as ess_cancel_leave(): pending any time, approved until it starts."""
-    return r.status == "pending" or (r.status == "approved" and r.start_date > today)
+    """Same rule as ess_cancel_leave(): only a pending request (approved leave: supervisor or HR)."""
+    return r.status == "pending"
 
 
 def _leave_out(r: LeaveRequest, today: str | None = None) -> dict:
@@ -788,7 +791,7 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
     # HRMS: the year the leave starts in, with pending requests counted as on hold.
     assert_leave_dates(payload.start_date, payload.end_date)
     days = leave_request_days(db, emp.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
-    assert_leave_available(db, emp.company_id, emp, payload.leave_type, payload.start_date, days)
+    assert_leave_available(db, emp.company_id, emp, payload.leave_type, payload.start_date, days, payload.end_date)
     attachment, attachment_name = checked_attachment(payload.attachment, payload.attachment_name)
     # Sick leave from ESS needs a sick note or a photo of it (HR can still enter one without).
     if payload.leave_type == "Sick Leave" and not attachment:
@@ -1133,8 +1136,8 @@ class EssLeaveCancelIn(BaseModel):
 
 @router.post("/leave/{leave_id}/cancel")
 def ess_cancel_leave(leave_id: str, request: Request, payload: EssLeaveCancelIn | None = None, db: Session = Depends(get_db)) -> dict:
-    """An employee can cancel their OWN leave: a pending request any time, and
-    approved leave until it starts (once it has started, HR cancels it in HRMS).
+    """An employee can withdraw their OWN pending leave request. Approved leave is cancelled
+    by their supervisor or HR in HRMS (company decision 2026-10-22), not from ESS.
     Kept as a "cancelled" status (not a delete) so the history -- and HR's audit
     trail -- survives; balances only count approved leave, so the days return."""
     emp = ess_bearer(request, db)
@@ -1146,11 +1149,9 @@ def ess_cancel_leave(leave_id: str, request: Request, payload: EssLeaveCancelIn 
     if not req:
         raise HTTPException(status_code=404, detail="Leave request not found")
     if req.status == "approved":
-        today = _local_today(_company_offset(db, emp.company_id)).isoformat()
-        if req.start_date <= today:
-            raise HTTPException(status_code=409, detail="This leave has already started — ask HR to cancel it")
-    elif req.status != "pending":
-        raise HTTPException(status_code=409, detail=f"Only pending or upcoming approved leave can be cancelled (this one is {req.status})")
+        raise HTTPException(status_code=409, detail="Approved leave can only be cancelled by your supervisor or HR")
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Only a pending request can be cancelled (this one is {req.status})")
     req.status = "cancelled"
     req.cancelled_at = datetime.now(UTC)
     req.cancelled_by = emp.full_name
@@ -1573,3 +1574,56 @@ def ess_documents(request: Request, db: Session = Depends(get_db)) -> list[dict]
             state = "valid"
         out.append({"label": label, "expiry": raw[:10] if raw else None, "days_left": days, "state": state})
     return out
+
+
+# ── First load in one request ──────────────────────────────────────────────────
+# Opening ESS made ~20 GET requests at once (profile, payslips, leave, rota, team, ...).
+# At a shift start, when most of a company's staff open ESS within minutes, that was 20
+# server slots and database connections per employee. /ess/start runs the same handlers in
+# one request and returns each answer under the path the app would have asked for; ess.js
+# answers those first requests from it and fetches anything missing as before.
+
+def _ess_start_calls(request: Request, db: Session, month: str) -> dict:
+    return {
+        "/ess/me": lambda: TypeAdapter(EssEmployeeOut).dump_python(
+            TypeAdapter(EssEmployeeOut).validate_python(ess_me(request, db), from_attributes=True), mode="json"),
+        "/ess/payslips": lambda: ess_payslips(request, db),
+        "/ess/announcements": lambda: TypeAdapter(list[EssAnnouncementOut]).dump_python(
+            TypeAdapter(list[EssAnnouncementOut]).validate_python(ess_announcements(request, db), from_attributes=True), mode="json"),
+        "/ess/leave": lambda: ess_leave(request, db),
+        "/ess/tasks": lambda: ess_tasks(request, db),
+        "/ess/leave-balance": lambda: ess_leave_balance(request, db),
+        "/ess/attendance": lambda: ess_attendance(request, db),
+        "/ess/profile-details": lambda: ess_profile_details(request, db),
+        "/ess/requests": lambda: ess_requests(request, db),
+        "/ess/holidays": lambda: ess_holidays(request, db),
+        "/ess/documents": lambda: ess_documents(request, db),
+        "/ess/rota": lambda: ess_rota(request, None, db),
+        f"/ess/rota?month={month}": lambda: ess_rota(request, month, db),
+        "/ess/team/today": lambda: ess_team_today(request, db),
+        "/ess/team/leave-requests": lambda: ess_team_leave_requests(request, db),
+        "/ess/tasks/department": lambda: ess_department_tasks(request, db),
+        f"/ess/team/leave?month={month}": lambda: ess_team_leave(request, month, db),
+        "/ess/overtime-eligibility": lambda: ess_overtime_eligibility(request, db),
+    }
+
+
+@router.get("/start")
+def ess_start(
+    request: Request,
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$", description="The browser's current YYYY-MM"),
+    db: Session = Depends(get_db),
+) -> dict:
+    emp = ess_bearer(request, db)   # an invalid token is refused once, here
+    month = month or _local_today(_company_offset(db, emp.company_id)).strftime("%Y-%m")
+    results: dict[str, dict] = {}
+    for path, call in _ess_start_calls(request, db, month).items():
+        try:
+            results[path] = {"status": 200, "body": jsonable_encoder(call())}
+        except HTTPException as exc:
+            results[path] = {"status": exc.status_code, "body": {"detail": exc.detail}}
+        except Exception:
+            # Left out: the app asks for this one on its own, as it did before.
+            db.rollback()
+            _log.exception("ess/start: %s failed", path)
+    return {"results": results}

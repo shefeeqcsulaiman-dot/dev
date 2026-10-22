@@ -25,6 +25,44 @@
     return {'Content-Type':'application/json','Authorization': t ? 'Bearer '+t : ''};
   }
 
+  // First load in one request (GET /ess/start, ess.py): opening ESS used to send ~20 GETs at
+  // once. The first time one of those paths is asked for, /ess/start is fetched (once) and
+  // each answer is handed out a single time, so a later refresh still goes to the server.
+  // Anything not in it, or asked for after the first 30 s, is fetched as before.
+  var _essNativeFetch = window.fetch.bind(window);
+  var _essStart = null, _essStartAt = 0;
+  var _ESS_START_PATH = /^\/ess\/(me|payslips|announcements|leave|tasks|leave-balance|attendance|profile-details|requests|holidays|documents|rota|team\/today|team\/leave-requests|tasks\/department|overtime-eligibility)(\?month=\d{4}-\d{2})?$|^\/ess\/team\/leave\?month=\d{4}-\d{2}$/;
+  function _essStartResults() {
+    if (!_essStart) {
+      var now = new Date();
+      var month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      _essStartAt = Date.now();
+      _essStart = _essNativeFetch(apiBase() + '/ess/start?month=' + month, {headers: essHeaders()})
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(d) { return (d && d.results) || {}; })
+        .catch(function() { return {}; });
+    }
+    return _essStart;
+  }
+  window.fetch = function(input, init) {
+    var url = typeof input === 'string' ? input : '';
+    var method = ((init && init.method) || 'GET').toUpperCase();
+    var base = apiBase();
+    if (method === 'GET' && url.indexOf(base) === 0 && localStorage.getItem(ESS_TOKEN_KEY)
+        && (!_essStartAt || Date.now() - _essStartAt < 30000)) {
+      var path = url.slice(base.length);
+      if (_ESS_START_PATH.test(path)) {
+        return _essStartResults().then(function(results) {
+          var hit = results[path];
+          if (!hit) return _essNativeFetch(input, init);
+          delete results[path];
+          return new Response(JSON.stringify(hit.body), {status: hit.status, headers: {'Content-Type': 'application/json'}});
+        });
+      }
+    }
+    return _essNativeFetch(input, init);
+  };
+
   // The ESS company id comes from the link HR shares with employees
   // (?c=<company_id>) and is only used to disambiguate an Employee No.
   // login (not unique across companies on this platform). It is deliberately
@@ -1776,7 +1814,7 @@
     if (!p) { el.innerHTML = '<div style="font-size:var(--fs-md);color:var(--text3);padding:6px 0">No payslip yet — it appears here once payroll has been run for you.</div>'; return; }
     var row = function(label, val, cls) { return '<div class="payslip-row' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span><span>' + (cls === 'neg' && Number(val) ? '− ' : '') + essMoney(val) + '</span></div>'; };
     el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px"><div style="font-size:var(--fs-sm);color:var(--text3)">' + escHtml(_psPeriodLabel(p.period)) + '</div><span class="st-badge st-' + _psStatusClass(p.run_status) + '">' + escHtml(p.run_status || '') + '</span></div>' +
-      '<div class="ps-net-val" style="font-size:var(--fs-2xl);margin-bottom:8px">' + essMoney(p.net_pay) + '</div>' +
+      '<div class="ps-net-val" style="font-size:var(--fs-xl);margin-bottom:8px">' + essMoney(p.net_pay) + '</div>' +
       row('Basic', p.basic) + row('Allowances', p.allowances) + row('Overtime', p.overtime) + row('Deductions', p.deductions, 'neg') +
       '<button class="btn-ghost ps-print" style="margin-top:10px" onclick="essGoTab(\'payslips\')">All payslips →</button>';
   }
@@ -2308,6 +2346,8 @@
       if (sk.weekend) parts.push(sk.weekend + ' weekend');
       if (sk.holiday) parts.push(sk.holiday + ' public holiday');
       if (sk.day_off) parts.push(sk.day_off + ' day' + (sk.day_off === 1 ? '' : 's') + ' off');
+      // Weekend Policy "Custom by rota": dates without a rota yet count 0 until the rota is saved.
+      if (sk.no_rota) parts.push(sk.no_rota + ' day' + (sk.no_rota === 1 ? '' : 's') + ' with no rota yet, counted once the rota is made');
       if (parts.length) {
         // Which dates were skipped, so the count can be checked against the rota.
         var sd = _essLeaveDays.data.skipped_dates || [];

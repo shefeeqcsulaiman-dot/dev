@@ -1209,7 +1209,7 @@
 #tb-dashboard .ed-kpi-grid .ess-kpi-icon{width:42px;height:42px;border-radius:12px;background:color-mix(in srgb,var(--tint) 16%,var(--surface))!important}
 #tb-dashboard .ed-kpi-grid .ess-kpi-icon svg{stroke:var(--tint)}
 #tb-dashboard .ed-kpi-grid .ess-kpi-lbl{font-size:var(--fs-sm);font-weight:600;color:var(--text2);margin-bottom:0}
-#tb-dashboard .ed-kpi-grid .ess-kpi-val{font-size:var(--fs-2xl);font-weight:700;margin:6px 0 3px;color:var(--text)!important;filter:none}
+#tb-dashboard .ed-kpi-grid .ess-kpi-val{font-size:var(--fs-xl);font-weight:700;margin:6px 0 3px;color:var(--text)!important;filter:none}
 #tb-dashboard .ed-kpi-grid .ess-kpi-sub{font-size:var(--fs-sm);color:var(--text3)}
 
 #tb-dashboard .ed-card{border-radius:16px;padding:16px 18px}

@@ -29,6 +29,8 @@ META.exception={t:'Exception Center',s:'Failed postings - duplicates - VAT/OCR -
 META.pos={t:'Point of Sale',s:'Quick sale - Products - Receipt - Cash & Card',a:'Launch Terminal',ao:()=>window.open('/pos','_blank')};
 
 let isHydratingFromServer=false;
+// One formatter for whole-dirham amounts: toLocaleString(...) built a new one for every number.
+const _AED_WHOLE=new Intl.NumberFormat('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0});
 const tableRefreshTimers=new WeakMap();
 const purchaseRecordCache=new Map();
 let currentPurchaseViewRef='';
@@ -1310,7 +1312,7 @@ function renderEmployeeRecord(employee){
     <td>${escapeHtml(employee.designation)}</td>
     <td>${escapeHtml(employee.supervisor)}</td>
     <td>${(()=>{const h=Number(employee.shift_hours||0);if(h>0){const t=(employee.shift_hours_type||'weekly');const label=t.charAt(0).toUpperCase()+t.slice(1)+' · '+h+'h';return `<span class="b b-b">${escapeHtml(label)}</span>`;}return employee.shift?`<span class="b b-b">${escapeHtml(employee.shift)}</span>`:'<span style="color:var(--text3)">—</span>';})()}</td>
-    <td class="mono">${window.HRMS_CAN_VIEW_SALARY===false?'—':Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+    <td class="mono">${window.HRMS_CAN_VIEW_SALARY===false?'—':_AED_WHOLE.format(Number(employee.salary||0))}</td>
     <td><span class="b ${employee.status==='Inactive'?'b-gray':'b-g'}">${escapeHtml(employee.status||'Active')}</span></td>
     <td data-action-col="1"><div class="row-actions"><button class="btn btn-g btn-sm" onclick="openEmployeeProfile(this)">View</button> <button class="icon-btn edit" type="button" title="Edit" onclick="editEmployeeFromRow(this)">${editIconSvg()}</button> <button class="btn btn-g btn-sm" onclick="toggleEmployeeStatusFromRow(this)">${employee.status==='Inactive'?'Activate':'Deactivate'}</button></div></td>`;
   // Employee Directory is kept sorted by Employee No. ascending (numeric-
@@ -1499,7 +1501,10 @@ function openEmployeeProfile(btn){
 function renderPayrollEmployeeRecord(employee){
   const tbody=document.getElementById('payroll-employee-tbody');
   if(!tbody)return;
-  const existing=[...tbody.querySelectorAll('tr')].find(row=>row.dataset.employeeId===employee.id||row.children[0]?.textContent.trim()===employee.name);
+  // By id with the browser's own lookup (copying every row into an array per employee made
+  // start-up O(n^2)); the name match is only for rows drawn before they carried an id.
+  const existing=(employee.id&&tbody.querySelector(`tr[data-employee-id="${CSS.escape(String(employee.id))}"]`))
+    ||[...tbody.querySelectorAll('tr:not([data-employee-id])')].find(row=>row.children[0]?.textContent.trim()===employee.name);
   if(existing)existing.remove();
   const bankText=employee.iban?`${employee.salary_bank||'Bank'} · ${String(employee.iban).slice(0,5)}...`:'Missing';
   const row=document.createElement('tr');
@@ -1521,9 +1526,9 @@ function renderPayrollEmployeeRecord(employee){
   row.innerHTML=`
     <td>${escapeHtml(employee.name)}</td>
     <td><span class="b b-t">${escapeHtml(employee.department||'Monthly')}</span></td>
-    <td class="mono">${Number(employee.salary||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-    <td class="mono">${Number(employee.housing_allowance||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-    <td class="mono">${Number(employee.transport_allowance||0).toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+    <td class="mono">${_AED_WHOLE.format(Number(employee.salary||0))}</td>
+    <td class="mono">${_AED_WHOLE.format(Number(employee.housing_allowance||0))}</td>
+    <td class="mono">${_AED_WHOLE.format(Number(employee.transport_allowance||0))}</td>
     <td class="mono" ${employee.iban?'':'style="color:var(--amber)"'}>${escapeHtml(bankText)}</td>
     <td class="mono">${escapeHtml('WPS-'+String(employee.id||'').replace(/\D/g,'').padStart(3,'0'))}</td>
     <td><span class="b ${employee.iban?'b-g':'b-a'}">${employee.iban?'Complete':'Review'}</span></td>`;
@@ -1547,7 +1552,7 @@ function renderPayrollEmployeeRecord(employee){
 function renderPayrollRunRow(employee){
   const tbody=document.getElementById('payroll-tbody');
   if(!tbody)return;
-  const existing=[...tbody.querySelectorAll('tr:not([data-empty-state])')].find(r=>r.dataset.employeeId===employee.id);
+  const existing=employee.id?tbody.querySelector(`tr[data-employee-id="${CSS.escape(String(employee.id))}"]:not([data-empty-state])`):null;
   if(existing)existing.remove();
   // Inactive employees keep their payroll history but shouldn't appear in
   // a NEW run — the comment above toggleEmployeeStatusFromRow() already
@@ -2288,7 +2293,26 @@ function syncStockMappingFromItems(){
   ensureInventoryBulkSelection();
 }
 
+// While start-up draws its lists (isHydratingFromServer), every category, unit and vendor row
+// used to rebuild the product dropdowns again: work growing with the square of the catalogue
+// (~0.5 s on a small company). They wait and run once when the drawing is done; any other
+// time (a user adding a category) they run at once as before.
+let _optionSyncWaiting=false;
+function _deferOptionSync(){
+  if(!isHydratingFromServer)return false;
+  if(!_optionSyncWaiting){
+    _optionSyncWaiting=true;
+    (function tick(){
+      if(isHydratingFromServer){setTimeout(tick,100);return;}
+      _optionSyncWaiting=false;
+      syncProductMasterOptions();
+      syncInventoryItemOptions();
+    })();
+  }
+  return true;
+}
 function syncInventoryItemOptions(){
+  if(_deferOptionSync())return;
   const categorySelect=document.getElementById('inv-item-category');
   if(categorySelect){
     const current=categorySelect.value;
@@ -6951,6 +6975,7 @@ function updateStockLevelStats(products){
 }
 
 function syncProductMasterOptions(){
+  if(_deferOptionSync())return;
   const categorySelect=document.getElementById('prod-category');
   const unitSelect=document.getElementById('prod-unit');
   const supplierSelect=document.getElementById('prod-supplier');
@@ -19806,6 +19831,8 @@ function _leaveSkipText(skipped,dates){
   if(skipped?.weekend)parts.push(`${skipped.weekend} weekend`);
   if(skipped?.holiday)parts.push(`${skipped.holiday} public holiday`);
   if(skipped?.day_off)parts.push(`${skipped.day_off} day${skipped.day_off===1?'':'s'} off`);
+  // Weekend Policy "Custom by rota": dates without a rota yet count 0 until the rota is saved.
+  if(skipped?.no_rota)parts.push(`${skipped.no_rota} day${skipped.no_rota===1?'':'s'} with no rota yet, counted once the rota is made`);
   if(!parts.length)return '';
   // Which dates, so HR can see why (e.g. rota days off) without opening the rota.
   const fmt=iso=>new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
@@ -29276,8 +29303,12 @@ function addTableDeleteActions(table){
   if(!table||table.dataset.deleteActionsBound==='skip')return;
   if(table.closest('#page-reports'))return;
   const headRow=table.tHead?.rows?.[0];
-  const existingActionCells=getTableRows(table).map(findGenericActionCell).filter(Boolean);
-  const actionIndex=existingActionCells[0]?[...existingActionCells[0].parentElement.children].indexOf(existingActionCells[0]):-1;
+  // Runs over every table at start-up: only the first action cell is needed for the column, and
+  // a row that already has its buttons is skipped before the (costly) action-cell search.
+  const rows=getTableRows(table);
+  let firstActionCell=null;
+  for(const row of rows){firstActionCell=findGenericActionCell(row);if(firstActionCell)break;}
+  const actionIndex=firstActionCell?[...firstActionCell.parentElement.children].indexOf(firstActionCell):-1;
   if(headRow){
     const actionHead=actionIndex>=0?headRow.cells[actionIndex]:[...headRow.cells].find(cell=>cell.dataset.actionCol);
     if(actionHead){
@@ -29290,8 +29321,9 @@ function addTableDeleteActions(table){
       headRow.appendChild(th);
     }
   }
-  getTableRows(table).forEach(row=>{
+  rows.forEach(row=>{
     if(row.querySelector('td[colspan]'))return;
+    if(row.dataset.rowActionsAdded==='1'&&row.querySelector('td[data-action-col="1"] .row-actions'))return;
     const td=findGenericActionCell(row)||document.createElement('td');
     if(row.dataset.rowActionsAdded==='1'&&td.querySelector('.row-actions'))return;
     td.dataset.actionCol='1';

@@ -4,6 +4,7 @@ import hashlib
 import html
 import io
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -1951,6 +1952,8 @@ def _app_data_action_run(
             store_employee_main_copy(db, principal.company_id, saved)
         db.flush()
         version = saved.row_version
+        if collection == "rotaAssignments":
+            _recount_leave_after_rota(db, principal.company_id, [record])
         db.commit()
         _invalidate_write_caches(collection, principal.company_id)
         return {"ok": True, "saved": True, "id": saved.id, "_v": version}
@@ -2034,6 +2037,8 @@ def _app_data_action_run(
             "records_bulk_saved",
             {"count": saved_count, "created": created_count, "updated": updated_count, "skipped": len(skipped_keys)},
         )
+        if collection == "rotaAssignments":
+            _recount_leave_after_rota(db, principal.company_id, normalized_records)
         db.commit()
         _invalidate_write_caches(collection, principal.company_id)
         return {"ok": True, "saved": saved_count, "created": created_count, "updated": updated_count,
@@ -2070,6 +2075,8 @@ def _app_data_action_run(
                 assert_collection_period_open(db, principal, collection, stored_record if isinstance(stored_record, dict) else record)
                 db.delete(existing)
                 deleted = True
+                if collection == "rotaAssignments":
+                    _recount_leave_after_rota(db, principal.company_id, [stored_record])
             sync_domain_delete(db, principal, collection, record)
         log_action(db, principal, collection, "record_deleted" if deleted else "delete_not_found", record)
         db.commit()
@@ -2088,6 +2095,7 @@ def _app_data_action_run(
         deleted_count = 0
         # A bulk DELETE skips the ORM hooks that keep invoices' amount_paid current.
         deleted_payments: list[Any] = []
+        deleted_rota: list[Any] = []
         if keys:
             existing_rows = (
                 db.query(AppDataRecord)
@@ -2109,6 +2117,8 @@ def _app_data_action_run(
                 assert_collection_period_open(db, principal, collection, stored_record if isinstance(stored_record, dict) else {})
                 if collection == "payments":
                     deleted_payments.append(stored_record)
+                if collection == "rotaAssignments":
+                    deleted_rota.append(stored_record)
             deleted_count = (
                 db.query(AppDataRecord)
                 .filter(
@@ -2122,6 +2132,8 @@ def _app_data_action_run(
             _unlink_deleted_tasks(db, principal.company_id, keys)
         if deleted_payments:
             recompute_payment_targets(db, principal.company_id, deleted_payments)
+        if deleted_rota:
+            _recount_leave_after_rota(db, principal.company_id, deleted_rota)
         # Bulk domain cleanup for purchaseRecords
         if collection == "purchaseRecords" and records:
             refs = [
@@ -2394,6 +2406,28 @@ def _assert_branch_writable(principal: Principal, collection: str, existing: App
     if active_branch and existing.branch_id == active_branch:
         return
     raise HTTPException(status_code=403, detail="This record belongs to a different branch")
+
+
+def _recount_leave_after_rota(db: Session, company_id: str, records: list) -> None:
+    """Rota entries changed (saved or deleted): leave on those employees' dates is recounted
+    (leave.recount_leave_for_rota()), e.g. leave booked before the rota existed under Weekend
+    Policy "Custom by rota" counted 0 days until now. A failure here never fails the rota save."""
+    by_emp: dict[str, set[str]] = {}
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        eno, day = str(r.get("employee_id") or "").strip(), str(r.get("date") or "")[:10]
+        if eno and len(day) == 10:
+            by_emp.setdefault(eno, set()).add(day)
+    if not by_emp:
+        return
+    from app.routers.leave import recount_leave_for_rota
+    db.flush()   # the rota_records mirror follows the flush; the recount reads it
+    try:
+        with db.begin_nested():
+            recount_leave_for_rota(db, company_id, by_emp)
+    except Exception:
+        logging.getLogger("taxflow").exception("leave recount after a rota change failed (company %s)", company_id)
 
 
 EDIT_CONFLICT_HEADER = "X-Edit-Conflict"

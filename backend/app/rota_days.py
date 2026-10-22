@@ -41,6 +41,15 @@ def _employee_days(db: Session, company_id: str, wanted: set, lo: str, hi: str, 
     return [row for row in query.all() if row[0] in wanted]
 
 
+def rota_entry_days(db: Session, company_id: str, employee_nos, start: date, end: date) -> set[tuple[str, str]]:
+    """(employee_no, 'YYYY-MM-DD') pairs that have any rota entry (shift, off, leave, holiday)
+    in start..end. rota_day_statuses() leaves shifts out; this says which days are on the rota."""
+    wanted = set(employee_nos)
+    if not wanted or end < start:
+        return set()
+    return {(eno, day) for eno, day in _employee_days(db, company_id, wanted, start.isoformat(), end.isoformat())}
+
+
 def rota_day_statuses(db: Session, company_id: str, employee_nos, start: date, end: date) -> dict[tuple[str, str], str]:
     """{(employee_no, 'YYYY-MM-DD'): 'off' | 'leave' | 'holiday'} for start..end; working days are omitted."""
     wanted = set(employee_nos)

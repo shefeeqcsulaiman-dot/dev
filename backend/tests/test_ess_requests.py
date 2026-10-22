@@ -66,15 +66,14 @@ def test_cannot_cancel_started_approved_or_someone_elses_leave(client, db, auth_
     # another employee can't touch it (404, not 403 -- don't reveal it exists)
     assert client.post(f"/api/v1/ess/leave/{leave_id}/cancel", headers=hb).status_code == 404
 
-    # Approved leave that has already started is HR's to cancel (upcoming approved
-    # leave can be cancelled by the employee -- see test_leave_cancel.py).
+    # Approved leave is the supervisor's or HR's to cancel (see test_leave_cancel.py).
     row = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).one()
     row.status = "approved"
     row.start_date = (date.today() - timedelta(days=1)).isoformat()
     db.commit()
     r = client.post(f"/api/v1/ess/leave/{leave_id}/cancel", headers=ha)
     assert r.status_code == 409
-    assert "started" in r.json()["detail"]
+    assert "supervisor or HR" in r.json()["detail"]
 
 
 # ── own task status ──────────────────────────────────────────────────────────

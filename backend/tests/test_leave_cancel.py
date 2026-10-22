@@ -1,6 +1,7 @@
 """Leave cancellation: HR cancels pending or approved leave in HRMS
-(POST /leave/requests/{id}/cancel); an employee cancels pending leave or
-approved leave that hasn't started yet from ESS (POST /ess/leave/{id}/cancel).
+(POST /leave/requests/{id}/cancel), and so does a supervisor with leave:edit; an employee
+withdraws only a pending request from ESS (POST /ess/leave/{id}/cancel) -- approved leave is
+the supervisor's or HR's to cancel (2026-10-22).
 Cancelled leave keeps its record and gives the days back to the balance."""
 import uuid
 from datetime import date, timedelta
@@ -87,21 +88,26 @@ def test_hr_cancel_needs_leave_edit_permission(client, db, auth_headers):
     assert client.post(f"/api/v1/leave/requests/{rid}/cancel", headers=viewer_headers).status_code == 403
 
 
-def test_employee_cancels_pending_and_upcoming_approved_leave(client, db, auth_headers):
+def test_employee_cancels_pending_but_not_approved_leave(client, db, auth_headers):
     emp, ess = _ess_employee(client, db, auth_headers)
     pending = _request(client, ess, _future(60), _future(60))
     upcoming = _request(client, ess, _future(70), _future(71))
     client.post(f"/api/v1/leave/requests/{upcoming}/approve", headers=auth_headers)
 
     flags = {x["id"]: x["can_cancel"] for x in client.get("/api/v1/ess/leave", headers=ess).json()}
-    assert flags[pending] is True and flags[upcoming] is True
+    assert flags[pending] is True and flags[upcoming] is False
     req_flags = {x["id"]: x["can_cancel"] for x in client.get("/api/v1/ess/requests", headers=ess).json() if x["kind"] == "leave"}
-    assert req_flags[upcoming] is True
+    assert req_flags[pending] is True and req_flags[upcoming] is False
 
-    assert client.post(f"/api/v1/ess/leave/{pending}/cancel", headers=ess).json()["status"] == "cancelled"
+    r = client.post(f"/api/v1/ess/leave/{pending}/cancel", headers=ess)
+    assert r.json()["status"] == "cancelled" and r.json()["cancelled_by"] == emp.full_name
     r = client.post(f"/api/v1/ess/leave/{upcoming}/cancel", headers=ess)
+    assert r.status_code == 409 and "supervisor or HR" in r.json()["detail"]
+
+    # A supervisor (HRMS role with leave:edit) cancels it.
+    _sup, sup_headers = _ess_employee(client, db, auth_headers, ["leave:view", "leave:edit"])
+    r = client.post(f"/api/v1/leave/requests/{upcoming}/cancel", headers=sup_headers)
     assert r.status_code == 200 and r.json()["status"] == "cancelled"
-    assert r.json()["cancelled_by"] == emp.full_name
 
 
 def test_employee_cannot_cancel_leave_that_has_started(client, db, auth_headers):
@@ -110,7 +116,7 @@ def test_employee_cannot_cancel_leave_that_has_started(client, db, auth_headers)
     client.post(f"/api/v1/leave/requests/{started}/approve", headers=auth_headers)
     assert {x["id"]: x["can_cancel"] for x in client.get("/api/v1/ess/leave", headers=ess).json()}[started] is False
     r = client.post(f"/api/v1/ess/leave/{started}/cancel", headers=ess)
-    assert r.status_code == 409 and "ask HR" in r.json()["detail"]
+    assert r.status_code == 409 and "supervisor or HR" in r.json()["detail"]
     # HR can still cancel it.
     assert client.post(f"/api/v1/leave/requests/{started}/cancel", headers=auth_headers).json()["status"] == "cancelled"
 

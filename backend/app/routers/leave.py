@@ -409,18 +409,23 @@ def leave_day_breakdown(db: Session, company_id: str, employee_no: str, leave_ty
                         start: date, end: date) -> dict:
     """The days a request uses, and which days it skipped and why. A rota day off and a public
     holiday are never counted, for every leave type (the employee was not due to work; public
-    holidays since 2026-10-22); "Working" types also skip the weekend, "Calendar" types count it."""
+    holidays since 2026-10-22); "Working" types also skip the weekend, "Calendar" types count it.
+    Weekend Policy "Custom by rota" has no company weekend: a Working-type leave then counts only
+    days on the employee's rota, and a date with no rota yet counts 0 ("no_rota"); saving the
+    rota for those dates recounts the request (recount_leave_for_rota(), 2026-10-22)."""
     basis = leave_basis(db, company_id, employee_no, leave_type)
     total = (end - start).days + 1
     if total <= 0:
         return {"basis": basis, "days": 0, "calendar_days": 0, "skipped": {}, "skipped_dates": []}
-    from app.rota_days import rota_day_statuses
+    from app.rota_days import rota_day_statuses, rota_entry_days
     from app.routers.attendance import _holiday_dates, _weekend_day_set
     # Calendar types count the weekend; only Working types skip it.
     weekend = _weekend_day_set(db, company_id) if basis == "Working" else None   # JS getDay numbers
+    by_rota_only = basis == "Working" and weekend is None   # Weekend Policy "Custom by rota"
     holidays = _holiday_dates(db, company_id)
     rota = rota_day_statuses(db, company_id, [employee_no], start, end)
-    skipped = {"weekend": 0, "holiday": 0, "day_off": 0}
+    on_rota = rota_entry_days(db, company_id, [employee_no], start, end)
+    skipped = {"weekend": 0, "holiday": 0, "day_off": 0, "no_rota": 0}
     skipped_dates = []
     days, d = 0, start
     while d <= end:
@@ -429,9 +434,12 @@ def leave_day_breakdown(db: Session, company_id: str, employee_no: str, leave_ty
             reason = "holiday"
         elif rota.get((employee_no, iso)) == "off":
             reason = "day_off"
-        elif weekend is not None and (d.weekday() + 1) % 7 in weekend and (employee_no, iso) not in rota:
-            # a rota shift on a weekend day is a working day for that employee
+        elif weekend is not None and (d.weekday() + 1) % 7 in weekend and (employee_no, iso) not in on_rota:
+            # a rota shift on a weekend day is a working day for that employee (on_rota, not
+            # `rota`: rota_day_statuses() leaves shifts out, so weekend shifts used to be skipped)
             reason = "weekend"
+        elif by_rota_only and (employee_no, iso) not in on_rota:
+            reason = "no_rota"
         else:
             reason = None
         if reason:
@@ -645,7 +653,7 @@ def create_leave_request(
     # per-type caps (see _leave_type_caps), which are always calendar days.
     assert_leave_dates(payload.start_date, payload.end_date)
     days = leave_request_days(db, principal.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
-    assert_leave_available(db, principal.company_id, emp, payload.leave_type, payload.start_date, days)
+    assert_leave_available(db, principal.company_id, emp, payload.leave_type, payload.start_date, days, payload.end_date)
     req = LeaveRequest(
         company_id=principal.company_id, employee_id=emp.id, leave_type=payload.leave_type,
         start_date=payload.start_date.isoformat(), end_date=payload.end_date.isoformat(),
@@ -1042,11 +1050,16 @@ def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type
     return caps.get(leave_type)
 
 
-def assert_leave_available(db: Session, company_id: str, employee: Employee, leave_type: str, start: date, days: int) -> None:
+def assert_leave_available(db: Session, company_id: str, employee: Employee, leave_type: str, start: date, days: int,
+                           end: date | None = None) -> None:
     """A new request must fit in what's left for the year it starts in, counting
     pending requests as already on hold -- otherwise several pending requests could
-    each pass on their own and add up to more than the entitlement."""
+    each pass on their own and add up to more than the entitlement. A request of 0 days is
+    allowed only when dates without a rota yet made it 0 (Custom by rota): it is recounted when
+    the rota is saved."""
     if days <= 0:
+        if end and leave_day_breakdown(db, company_id, employee.employee_no, leave_type, start, end)["skipped"].get("no_rota"):
+            return
         raise HTTPException(status_code=400, detail="These dates are all weekend, public holiday or rota days off: no leave days to request")
     entitlement = leave_entitlement(db, company_id, employee.employee_no, leave_type, on=start)
     if entitlement is None:
@@ -1216,6 +1229,33 @@ def leave_balances(db: Session, company_id: str, employees: list[Employee], on: 
             }
         out[e.id] = entry
     return out
+
+
+def recount_leave_for_rota(db: Session, company_id: str, day_by_employee: dict[str, set[str]]) -> int:
+    """The rota changed on these (employee_no -> dates): recount the pending and approved requests
+    covering them, so leave booked before the rota existed (0 days under Custom by rota) or
+    whose days off moved uses the right number of days. The caller commits. Returns how many changed."""
+    changed = 0
+    for employee_no, dates in day_by_employee.items():
+        if not employee_no or not dates:
+            continue
+        emp = db.query(Employee.id).filter(Employee.company_id == company_id, Employee.employee_no == employee_no).first()
+        if not emp:
+            continue
+        lo, hi = min(dates), max(dates)
+        for req in db.query(LeaveRequest).filter(LeaveRequest.company_id == company_id, LeaveRequest.employee_id == emp[0],
+                                                 LeaveRequest.status.in_(("approved", "pending")),
+                                                 LeaveRequest.start_date <= hi, LeaveRequest.end_date >= lo).all():
+            if not any(req.start_date[:10] <= d <= req.end_date[:10] for d in dates):
+                continue
+            start, end = _parse_date(req.start_date), _parse_date(req.end_date)
+            if not (start and end):
+                continue
+            days = leave_request_days(db, company_id, employee_no, req.leave_type, start, end)
+            if days != req.days:
+                req.days = days
+                changed += 1
+    return changed
 
 
 def recount_leave_requests(db: Session, company_id: str, since: date) -> int:
