@@ -10192,7 +10192,6 @@ function hydrateFromServer(){
     ].reduce((sum,rows)=>sum+(Array.isArray(rows)?rows.length:0),0);
     window.__taxflowLastDbLoad={at:new Date().toISOString(),totalLoaded,renderStats};
     console.info(`TaxFlow DB tables loaded: ${totalLoaded} records`);
-    if(totalLoaded>0)toast(`Database tables loaded: ${totalLoaded} records`,'ok');
     if(document.getElementById('page-sales')?.classList.contains('on'))ensureSalesRegisterLoaded();
     // Restore full multi-layout array from server (cross-device sync)
     const packArr=data['invoice-layouts-pack'];
@@ -22710,7 +22709,11 @@ function renderRotaEditTasks(tasks){
 function addRotaEditTaskRow(){
   const list=document.getElementById('rota-edit-tasks-list');
   if(!list)return;
-  list.insertAdjacentHTML('beforeend',_rotaEditTaskRowHtml());
+  // Start from the shift's own times: Chrome's picker leaves an empty time field blank until
+  // hour, minute and AM/PM are all picked, so a click on just the hour looked like it did nothing.
+  const start=document.getElementById('rota-edit-start')?.value||'09:00';
+  const end=document.getElementById('rota-edit-end')?.value||'18:00';
+  list.insertAdjacentHTML('beforeend',_rotaEditTaskRowHtml({start,end}));
   _updateRotaEditTasksEmptyState();
 }
 
@@ -31483,15 +31486,29 @@ function attTrendLeave(wrap){
 // signup.html sets localStorage 'taxflow_tour_pending' when a new trial account is created;
 // the first time the main app then loads it walks through the main areas once (a spotlight
 // on each sidebar item / button, with Back / Next / Skip). startAppTour() runs it again.
-const _APP_TOUR_STEPS=[
+// The HRMS portal has its own tour (_HRMS_TOUR_STEPS): the main tour marks it pending, and it
+// runs the first time HRMS opens.
+const _MAIN_TOUR_STEPS=[
   {title:'Welcome to ETaxFlow',text:'Your 3-day free trial is active, with every module unlocked. This quick tour shows where things are — it takes under a minute.'},
   {sel:'.nav[onclick="go(\'sales\')"]',title:'Sales',text:'Create VAT invoices, quotations and receipts. Every invoice posts to your accounts and VAT return automatically.'},
   {sel:'.nav[onclick="go(\'purchase\')"]',title:'Purchases & expenses',text:'Record supplier bills and expenses. Upload a bill photo or PDF and AI fills in the details for you.'},
   {sel:'.nav[onclick="go(\'reports\')"]',title:'Reports',text:'VAT return, profit & loss, balance sheet and more — always up to date with what you enter.'},
-  {sel:'#nav-hrms',title:'People & HR',text:'Employees, rota, attendance, leave and payroll. Your staff use the ESS app to check in and send requests.'},
+  {sel:'#nav-hrms',title:'People & HR',text:'Employees, rota, attendance, leave and payroll open in the HRMS portal, which has a short tour of its own the first time. Your staff use the ESS app to check in and send requests.'},
   {sel:'[data-module-gate="ai"][onclick="go(\'ai\')"]',title:'AI Assistant',text:'Ask questions about your business in plain words, or let it do routine work for you.'},
   {sel:'.nav[onclick="go(\'settings\')"]',title:'Start here: your company',text:'Add your company details, TRN and logo so they appear on your invoices.',last:true},
 ];
+const _HRMS_TOUR_STEPS=[
+  {title:'Welcome to HRMS',text:'Everything for your people is here: staff records, attendance, rota, leave and payroll. This quick tour shows where things are.'},
+  {sel:'.nav[data-module="employees"]',title:'Employees',text:'Add your staff with their documents, salary and ESS login. Everything else in HRMS builds on these records.'},
+  {sel:'.nav[data-module="attendance"]',title:'Attendance',text:'Check-ins from the ESS app (GPS) and biometric devices land here, with late arrivals and missed punches marked.'},
+  {sel:'.nav[data-module="rota"]',title:'Rota',text:'Plan weekly or monthly shifts, days off and leave. Staff see their rota in the ESS app.'},
+  {sel:'.nav[data-module="leave"]',title:'Leave',text:'Approve leave requests and see each employee\'s balance, worked out from your leave policies.'},
+  {sel:'.nav[data-module="payroll"]',title:'Payroll',text:'Run monthly payroll from attendance, overtime, leave and loans, then export the WPS file.'},
+  {sel:'#support-btn',title:'Need help?',text:'Raise a support ticket to the ETaxFlow team here. Replies come back to the same ticket.'},
+  {sel:'#nav-hr-settings',title:'Start here: HR settings',text:'Set your working hours, shifts, leave policies and holidays first, so attendance, leave and payroll work out correctly.',last:true},
+];
+const _tourHrms=()=>!!window.HRMS_STANDALONE;
+const _tourSteps=()=>_tourHrms()?_HRMS_TOUR_STEPS:_MAIN_TOUR_STEPS;
 let _appTour=null;
 function _appTourTarget(step){
   if(!step.sel)return null;
@@ -31504,15 +31521,15 @@ function _appTourTarget(step){
 }
 function _appTourRender(){
   if(!_appTour)return;
-  const {i,root}=_appTour, step=_APP_TOUR_STEPS[i], n=_APP_TOUR_STEPS.length;
+  const steps=_tourSteps(), {i,root}=_appTour, step=steps[i], n=steps.length;
   const spot=root.querySelector('.tour-spot'), card=root.querySelector('.tour-card');
   card.querySelector('.tour-step').textContent=`${i+1} of ${n}`;
   card.querySelector('.tour-title').textContent=step.title;
   card.querySelector('.tour-text').textContent=step.text;
-  card.querySelector('.tour-dots').innerHTML=_APP_TOUR_STEPS.map((_,k)=>`<span class="${k===i?'on':''}"></span>`).join('');
+  card.querySelector('.tour-dots').innerHTML=steps.map((_,k)=>`<span class="${k===i?'on':''}"></span>`).join('');
   const back=card.querySelector('.tour-back'), next=card.querySelector('.tour-next'), skip=card.querySelector('.tour-skip');
   back.style.visibility=i?'visible':'hidden';
-  next.textContent=step.last?'Set up my company':(i?'Next':'Start the tour');
+  next.textContent=step.last?(_tourHrms()?'Open HR settings':'Set up my company'):(i?'Next':'Start the tour');
   skip.textContent=step.last?'Explore on my own':'Skip tour';
   const el=_appTourTarget(step);
   if(el)el.scrollIntoView({block:'nearest'});
@@ -31542,19 +31559,24 @@ function _appTourEnd(goSettings){
   window.removeEventListener('resize',_appTour.onResize);
   document.removeEventListener('keydown',_appTour.onKey,true);
   _appTour=null;
-  try{localStorage.removeItem('taxflow_tour_pending');localStorage.setItem('taxflow_tour_done','1');}catch(e){}
-  if(goSettings)go('company');
+  try{
+    if(_tourHrms()){localStorage.removeItem('taxflow_hrms_tour_pending');localStorage.setItem('taxflow_hrms_tour_done','1');}
+    else{localStorage.removeItem('taxflow_tour_pending');localStorage.setItem('taxflow_tour_done','1');}
+  }catch(e){}
+  if(goSettings)go(_tourHrms()?'hr-settings':'company');
 }
 function _appTourMove(d){
   if(!_appTour)return;
   const i=_appTour.i+d;
   if(i<0)return;
-  if(i>=_APP_TOUR_STEPS.length){_appTourEnd(true);return;}
+  if(i>=_tourSteps().length){_appTourEnd(true);return;}
   _appTour.i=i;
   _appTourRender();
 }
 function startAppTour(){
-  if(_appTour||window.HRMS_STANDALONE)return;
+  if(_appTour)return;
+  // A new account sees the HRMS tour the first time it opens HRMS too.
+  if(!_tourHrms())try{if(localStorage.getItem('taxflow_hrms_tour_done')!=='1')localStorage.setItem('taxflow_hrms_tour_pending','1');}catch(e){}
   if(document.body.classList.contains('sb-open'))toggleSidebar(false);
   const root=document.createElement('div');
   root.className='tour-root';
@@ -31590,9 +31612,9 @@ function startAppTour(){
 }
 window.startAppTour=startAppTour;
 window.addEventListener('load',()=>{
-  if(window.HRMS_STANDALONE)return;
+  const key=_tourHrms()?'taxflow_hrms_tour':'taxflow_tour';
   let pending=false;
-  try{pending=localStorage.getItem('taxflow_tour_pending')==='1'&&localStorage.getItem('taxflow_tour_done')!=='1';}catch(e){}
+  try{pending=localStorage.getItem(key+'_pending')==='1'&&localStorage.getItem(key+'_done')!=='1';}catch(e){}
   // after the dashboard and module gating have settled, so hidden modules are skipped
   if(pending)setTimeout(startAppTour,1500);
 });
