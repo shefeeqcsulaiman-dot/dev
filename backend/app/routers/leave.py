@@ -395,34 +395,43 @@ def leave_day_breakdown(db: Session, company_id: str, employee_no: str, leave_ty
     basis = leave_basis(db, company_id, employee_no, leave_type)
     total = (end - start).days + 1
     if total <= 0:
-        return {"basis": basis, "days": 0, "calendar_days": 0, "skipped": {}}
+        return {"basis": basis, "days": 0, "calendar_days": 0, "skipped": {}, "skipped_dates": []}
     from app.rota_days import rota_day_statuses
     if basis != "Working":
         from app.routers.attendance import _holiday_dates
         rota = rota_day_statuses(db, company_id, [employee_no], start, end)
         holidays = _holiday_dates(db, company_id) if rota else set()
         # A public holiday with no rota entry is the holiday, which Calendar types count.
-        off = sum(1 for (_eno, iso), kind in rota.items() if kind == "off" and iso not in holidays)
-        return {"basis": basis, "days": total - off, "calendar_days": total, "skipped": {"day_off": off} if off else {}}
+        off_dates = sorted(iso for (_eno, iso), kind in rota.items() if kind == "off" and iso not in holidays)
+        off = len(off_dates)
+        return {"basis": basis, "days": total - off, "calendar_days": total, "skipped": {"day_off": off} if off else {},
+                "skipped_dates": [{"date": iso, "reason": "day_off"} for iso in off_dates]}
     from app.routers.attendance import _holiday_dates, _weekend_day_set
     weekend = _weekend_day_set(db, company_id)              # JS getDay numbers, None = no weekend
     holidays = _holiday_dates(db, company_id)
     rota = rota_day_statuses(db, company_id, [employee_no], start, end)
     skipped = {"weekend": 0, "holiday": 0, "day_off": 0}
+    skipped_dates = []
     days, d = 0, start
     while d <= end:
         iso = d.isoformat()
         if iso in holidays or rota.get((employee_no, iso)) == "holiday":
-            skipped["holiday"] += 1
+            reason = "holiday"
         elif rota.get((employee_no, iso)) == "off":
-            skipped["day_off"] += 1
+            reason = "day_off"
         elif weekend is not None and (d.weekday() + 1) % 7 in weekend and (employee_no, iso) not in rota:
             # a rota shift on a weekend day is a working day for that employee
-            skipped["weekend"] += 1
+            reason = "weekend"
+        else:
+            reason = None
+        if reason:
+            skipped[reason] += 1
+            skipped_dates.append({"date": iso, "reason": reason})
         else:
             days += 1
         d += timedelta(days=1)
-    return {"basis": basis, "days": days, "calendar_days": total, "skipped": {k: v for k, v in skipped.items() if v}}
+    return {"basis": basis, "days": days, "calendar_days": total, "skipped": {k: v for k, v in skipped.items() if v},
+            "skipped_dates": skipped_dates}
 
 
 def leave_window_for(db: Session, company_id: str, employee_no: str, on: date,

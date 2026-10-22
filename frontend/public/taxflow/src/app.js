@@ -19794,12 +19794,16 @@ async function cancelLeave(id){
 // Live count for the HRMS leave form: the server's own rule (GET /leave/days): working-day
 // leave skips the weekend, public holidays and the employee's rota days off.
 let _leaveDaysSeq=0;
-function _leaveSkipText(skipped){
+function _leaveSkipText(skipped,dates){
   const parts=[];
   if(skipped?.weekend)parts.push(`${skipped.weekend} weekend`);
   if(skipped?.holiday)parts.push(`${skipped.holiday} public holiday`);
   if(skipped?.day_off)parts.push(`${skipped.day_off} day${skipped.day_off===1?'':'s'} off`);
-  return parts.length?` (skips ${parts.join(', ')})`:'';
+  if(!parts.length)return '';
+  // Which dates, so HR can see why (e.g. rota days off) without opening the rota.
+  const fmt=iso=>new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  const list=(dates||[]).slice(0,10).map(x=>fmt(x.date)).join(', ')+((dates||[]).length>10?', …':'');
+  return ` (skips ${parts.join(', ')}${list?': '+list:''})`;
 }
 async function updateLeaveDaysPreview(){
   const el=document.getElementById('leave-days-preview');
@@ -19814,7 +19818,7 @@ async function updateLeaveDaysPreview(){
     const r=await authenticatedFetch(`${apiBaseUrl()}/leave/days?employee_id=${encodeURIComponent(employeeId)}&leave_type=${encodeURIComponent(leaveType)}&start=${from}&end=${to}`);
     if(seq!==_leaveDaysSeq||!r.ok)return;
     const d=await r.json();
-    el.innerHTML=`<b>${d.days} day${d.days===1?'':'s'}</b> of ${escapeHtml(leaveType)} · ${d.basis==='Working'?'working days':'calendar days'}${escapeHtml(_leaveSkipText(d.skipped))}`;
+    el.innerHTML=`<b>${d.days} day${d.days===1?'':'s'}</b> of ${escapeHtml(leaveType)} · ${d.basis==='Working'?'working days':'calendar days'}${escapeHtml(_leaveSkipText(d.skipped,d.skipped_dates))}`;
     el.style.display='block';
   }catch(e){/* the request itself still shows the server's answer */}
 }
@@ -22986,14 +22990,20 @@ function _rotaLeaveMap(){
   _rotaLeaveSrc=_leaveRequestsCache;_rotaLeaveByDay=map;
   return map;
 }
-// The Rota needs the leave list even when the Leave screen hasn't been opened yet.
+// The Rota needs the leave list even when the Leave screen hasn't been opened yet, and a
+// request made in ESS since then: fetched again at most every 30 s (Refresh: right away), and
+// the boards redrawn only when a request was added or changed.
+let _rotaLeavesAt=0;
+const _leaveListSig=list=>(list||[]).map(l=>`${l.id}|${l.status}|${l.start_date}|${l.end_date}`).join(',');
 function _ensureRotaLeaves(){
-  if(_rotaLeavesFetched||(_leaveRequestsCache&&_leaveRequestsCache.length))return;
-  _rotaLeavesFetched=true;
+  if(_rotaLeavesFetched||Date.now()-_rotaLeavesAt<30000)return;
+  _rotaLeavesFetched=true;_rotaLeavesAt=Date.now();
   _fetchLeaveRequestsList().then(r=>r.ok?r.json():null).then(list=>{
-    if(Array.isArray(list)&&list.length){_leaveRequestsCache=list;renderRotaBoards();}
-  }).catch(()=>{});
+    _rotaLeavesFetched=false;
+    if(Array.isArray(list)&&_leaveListSig(list)!==_leaveListSig(_leaveRequestsCache)){_leaveRequestsCache=list;renderRotaBoards();}
+  }).catch(()=>{_rotaLeavesFetched=false;});
 }
+function refreshRotaBoards(){_rotaLeavesAt=0;renderRotaBoards();}
 
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='rota-edit-mark'){const h=document.getElementById('rota-edit-extra-hint');if(h)h.style.display=e.target.value==='OT'?'':'none';_fillRotaLeaveTypes();}});
 // Rota "Mark As: Leave": the leave types HR offers (the Request Leave form's list, inactive
@@ -23721,7 +23731,9 @@ function rotaMonthCellHtml(assignment){
   else if(code==='N'||assignment?.className==='night'){tone='indigo';}
   if(assignment?.className==='draft'&&tone==='green')tone='gray';
   const tasks=Array.isArray(assignment?.tasks)&&assignment.tasks.length?'<i class="rs-m-task" aria-hidden="true"></i>':'';
-  return `<span class="rs-m-cell rs-m-${tone}">${escapeHtml(text.slice(0,3))}${tasks}</span>`;
+  // A leave request not yet approved: the shift stays, outlined in the leave colour.
+  const pending=assignment?.leave_pending?' rs-m-pending':'';
+  return `<span class="rs-m-cell rs-m-${tone}${pending}">${escapeHtml(text.slice(0,3))}${tasks}</span>`;
 }
 
 function renderMonthlyRotaBoard(){
@@ -23793,7 +23805,7 @@ function renderMonthlyRotaBoard(){
     }).join('');
     return `<tr><th scope="row" class="rs-mg-staff"><span class="rs-mg-name">${escapeHtml(staff.name)}</span><span class="rs-mg-sub">${escapeHtml(staff.department)}${staff.role?` · ${escapeHtml(staff.role)}`:''}</span></th>${cells}<td class="rs-mg-total">${total.toFixed(1)}</td></tr>`;
   }).join('');
-  const legend=`<div class="rs-mg-legend">${[['green','M / E','Working'],['indigo','N','Night'],['orange','OT','Extra shift'],['blue','TR','Training'],['navy','PH','Holiday'],['leave','L','Leave'],['off','OFF','Day off'],['gray','','Draft']].map(([t,c,l])=>`<span><i class="rs-m-cell rs-m-${t}">${c||'·'}</i>${l}</span>`).join('')}</div>`;
+  const legend=`<div class="rs-mg-legend">${[['green','M / E','Working'],['indigo','N','Night'],['orange','OT','Extra shift'],['blue','TR','Training'],['navy','PH','Holiday'],['leave','L','Leave'],['green rs-m-pending','M','Leave requested'],['off','OFF','Day off'],['gray','','Draft']].map(([t,c,l])=>`<span><i class="rs-m-cell rs-m-${t}">${c||'·'}</i>${l}</span>`).join('')}</div>`;
   board.innerHTML=notice+`<div class="rs-mg-wrap"><table class="rs-mg"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`+legend;
 }
 

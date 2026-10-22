@@ -1,9 +1,10 @@
 """Rota days off: which (employee, date) pairs the rota says are not working days.
 
 A day is off when the rota marks it Off, or when the employee has no rota entry that
-day but does have entries elsewhere in the same Mon-Sun week (the rota is published
-for them, so the gap is a day off). A week with no entries at all means the rota
-isn't set yet, so nothing is inferred. Rota Leave / Holiday marks are reported too.
+day but does have a shift or Off entry elsewhere in the same Mon-Sun week (the rota is
+published for them, so the gap is a day off). A week with no entries, or only Leave /
+Holiday marks (e.g. leave booked from the rota), means the rota isn't set yet, so nothing
+is inferred. Rota Leave / Holiday marks are reported too.
 """
 import json
 from datetime import date, timedelta
@@ -64,7 +65,7 @@ def rota_day_statuses(db: Session, company_id: str, employee_nos, start: date, e
 
     out: dict[tuple[str, str], str] = {}
     for eno, days in by_emp.items():
-        weeks_with_rota = {week_of[day] for day in days}
+        weeks_with_rota = {week_of[day] for day, kind in days.items() if kind in ("shift", "off")}
         for iso in span:
             kind = days.get(iso)
             if kind is not None:

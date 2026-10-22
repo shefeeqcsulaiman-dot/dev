@@ -76,3 +76,26 @@ def test_rota_days_off_are_not_counted_for_calendar_day_leave(db, client, auth_h
     # A week with no rota at all: nothing inferred, every day counts.
     none = leave_day_breakdown(db, company_id, "ROFF-1", "Sick Leave", date(2026, 9, 1), date(2026, 9, 3))
     assert none["days"] == 3 and none["skipped"] == {}
+
+
+def test_week_with_only_leave_marks_infers_no_days_off(db, client, auth_headers):
+    """Leave booked from the rota (Mark As: Leave) in a week with no rota set is not a
+    published rota: the week's other days must not turn into days off (2026-10-22)."""
+    from app.routers.leave import leave_day_breakdown
+
+    company_id = _company_id(client, auth_headers)
+    _setup(db, company_id)
+    _rota(db, company_id, "ROFF-1", "2026-09-08", code="L", mark="Leave", leave_type="Annual Leave")
+    got = rota_day_statuses(db, company_id, ["ROFF-1"], date(2026, 9, 7), date(2026, 9, 13))
+    assert got == {("ROFF-1", "2026-09-08"): "leave"}
+    leave = leave_day_breakdown(db, company_id, "ROFF-1", "Sick Leave", date(2026, 9, 9), date(2026, 9, 10))
+    assert leave["days"] == 2 and leave["skipped"] == {} and leave["skipped_dates"] == []
+
+
+def test_leave_day_breakdown_lists_the_skipped_dates(db, client, auth_headers):
+    from app.routers.leave import leave_day_breakdown
+
+    company_id = _company_id(client, auth_headers)
+    _setup(db, company_id)
+    got = leave_day_breakdown(db, company_id, "ROFF-1", "Sick Leave", date(2026, 8, 24), date(2026, 8, 27))
+    assert got["skipped_dates"] == [{"date": "2026-08-25", "reason": "day_off"}, {"date": "2026-08-26", "reason": "day_off"}]

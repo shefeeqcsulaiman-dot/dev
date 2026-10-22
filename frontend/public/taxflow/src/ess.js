@@ -2308,7 +2308,14 @@
       if (sk.weekend) parts.push(sk.weekend + ' weekend');
       if (sk.holiday) parts.push(sk.holiday + ' public holiday');
       if (sk.day_off) parts.push(sk.day_off + ' day' + (sk.day_off === 1 ? '' : 's') + ' off');
-      if (parts.length) skipNote = ' (skips ' + parts.join(', ') + ')';
+      if (parts.length) {
+        // Which dates were skipped, so the count can be checked against the rota.
+        var sd = _essLeaveDays.data.skipped_dates || [];
+        var list = sd.slice(0, 10).map(function(x) {
+          return new Date(x.date + 'T00:00:00').toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short'});
+        }).join(', ') + (sd.length > 10 ? ', …' : '');
+        skipNote = ' (skips ' + parts.join(', ') + (list ? ': ' + list : '') + ')';
+      }
     } else if (days >= 1 && _essLeaveDays.key !== key) {
       _essLeaveDays = {key: key, data: null};
       fetch(apiBase() + '/ess/leave/days?leave_type=' + encodeURIComponent(type) + '&start=' + s + '&end=' + e, {headers: essHeaders()})

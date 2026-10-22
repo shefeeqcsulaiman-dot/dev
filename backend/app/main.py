@@ -269,7 +269,8 @@ def create_app() -> FastAPI:
                 db.execute(text("CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR(80) PRIMARY KEY)"))
                 db.commit()
                 # 2026-10-20: rota days off are no longer counted for Calendar-day leave either.
-                if not db.execute(text("SELECT 1 FROM schema_flags WHERE name = 'leave_recount_2026_10_dayoff'")).first():
+                # 2026-10-22: a week with only rota Leave/Holiday marks no longer makes its other days off.
+                if not db.execute(text("SELECT 1 FROM schema_flags WHERE name = 'leave_recount_2026_10_rotaweeks'")).first():
                     since = _date(_date.today().year, 1, 1)
                     for (cid,) in db.query(LeaveRequest.company_id).filter(LeaveRequest.start_date >= since.isoformat()).distinct().all():
                         try:
@@ -279,7 +280,7 @@ def create_app() -> FastAPI:
                         except Exception as exc:
                             db.rollback()
                             log.warning("leave recount skipped for company %s: %s", cid, exc)
-                    db.execute(text("INSERT INTO schema_flags (name) VALUES ('leave_recount_2026_10_dayoff') ON CONFLICT (name) DO NOTHING"))
+                    db.execute(text("INSERT INTO schema_flags (name) VALUES ('leave_recount_2026_10_rotaweeks') ON CONFLICT (name) DO NOTHING"))
                     db.commit()
         except Exception as exc:
             log.error("Leave recount failed: %s", exc)
@@ -355,7 +356,7 @@ def create_app() -> FastAPI:
 
     # Bumped with each deploy-relevant change, so /health shows which code is live (the image
     # has no git metadata). Format: date.sequence.
-    BUILD = "2026-10-22.1"
+    BUILD = "2026-10-22.2"
     globals()["_LIVE_BUILD"] = BUILD
 
     def monitoring_sentry_on() -> bool:

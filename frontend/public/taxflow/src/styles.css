@@ -2137,6 +2137,7 @@ input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
 .rs-cell-navy .rs-pill{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rs-tinted.rs-cell-navy{background:rgba(30,58,138,.12);}
 .rs-m-leave{background:rgba(236,72,153,.13);color:#be185d;}
+.rs-m-cell.rs-m-pending{outline:2px dashed #db2777;outline-offset:-2px;}
 .rs-m-off{background:var(--bg3);color:var(--text3);font-weight:600;}
 .rs-m-gray{background:var(--bg3);color:var(--text2);border:1px dashed var(--border);}
 .rs-m-task{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--accent);}
