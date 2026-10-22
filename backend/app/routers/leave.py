@@ -358,6 +358,11 @@ def accrued_days(settings: dict, yearly_days: float, join_date: date | None, on:
     service_start = max(ws, join_date) if join_date else ws
     if join_date and join_date > on:
         return 0.0
+    # Joined after the 15th of a month inside the leave year: that month isn't earned, earning
+    # starts the month after (HR decision 2026-10-22). A leave year that starts on the joining
+    # date ("Joining Date (rolling)") has join_date == ws and is not affected.
+    if join_date and join_date > ws and join_date.day > 15:
+        service_start = _add_months(date(join_date.year, join_date.month, 1), 1)
     accrual = str(settings.get("accrual") or "Monthly")
     last_month = we - timedelta(days=1)
     if accrual.startswith("Upfront"):
@@ -387,27 +392,31 @@ def leave_basis(db: Session, company_id: str, employee_no: str, leave_type: str,
     return _leave_type_basis(settings, leave_type) or "Calendar"
 
 
+MAX_LEAVE_SPAN_DAYS = 366
+
+
+def assert_leave_dates(start: date, end: date) -> None:
+    """Dates a leave request or day count may use: from 2000 on, at most a year long. A
+    half-typed year (0002-10-11) made the server count every day of 2,000 years (4-7 s)."""
+    if start.year < 2000 or end.year < 2000:
+        raise HTTPException(status_code=400, detail="Check the dates: the year looks incomplete")
+    if (end - start).days + 1 > MAX_LEAVE_SPAN_DAYS:
+        raise HTTPException(status_code=400, detail="A leave request can cover at most one year; split it into two requests")
+
+
 def leave_day_breakdown(db: Session, company_id: str, employee_no: str, leave_type: str,
                         start: date, end: date) -> dict:
-    """The days a request uses, and which days it skipped and why. A rota day off is never
-    counted, for every leave type (the employee was not due to work); "Working" types also
-    skip the weekend and public holidays, "Calendar" types count those."""
+    """The days a request uses, and which days it skipped and why. A rota day off and a public
+    holiday are never counted, for every leave type (the employee was not due to work; public
+    holidays since 2026-10-22); "Working" types also skip the weekend, "Calendar" types count it."""
     basis = leave_basis(db, company_id, employee_no, leave_type)
     total = (end - start).days + 1
     if total <= 0:
         return {"basis": basis, "days": 0, "calendar_days": 0, "skipped": {}, "skipped_dates": []}
     from app.rota_days import rota_day_statuses
-    if basis != "Working":
-        from app.routers.attendance import _holiday_dates
-        rota = rota_day_statuses(db, company_id, [employee_no], start, end)
-        holidays = _holiday_dates(db, company_id) if rota else set()
-        # A public holiday with no rota entry is the holiday, which Calendar types count.
-        off_dates = sorted(iso for (_eno, iso), kind in rota.items() if kind == "off" and iso not in holidays)
-        off = len(off_dates)
-        return {"basis": basis, "days": total - off, "calendar_days": total, "skipped": {"day_off": off} if off else {},
-                "skipped_dates": [{"date": iso, "reason": "day_off"} for iso in off_dates]}
     from app.routers.attendance import _holiday_dates, _weekend_day_set
-    weekend = _weekend_day_set(db, company_id)              # JS getDay numbers, None = no weekend
+    # Calendar types count the weekend; only Working types skip it.
+    weekend = _weekend_day_set(db, company_id) if basis == "Working" else None   # JS getDay numbers
     holidays = _holiday_dates(db, company_id)
     rota = rota_day_statuses(db, company_id, [employee_no], start, end)
     skipped = {"weekend": 0, "holiday": 0, "day_off": 0}
@@ -633,6 +642,7 @@ def create_leave_request(
     # Only Annual Leave is counted against a named policy's Working/Calendar
     # basis — Sick/Emergency/etc. leave types are governed by their own flat
     # per-type caps (see _leave_type_caps), which are always calendar days.
+    assert_leave_dates(payload.start_date, payload.end_date)
     days = leave_request_days(db, principal.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
     assert_leave_available(db, principal.company_id, emp, payload.leave_type, payload.start_date, days)
     req = LeaveRequest(
@@ -832,7 +842,14 @@ def book_leave_from_rota(
             detail=f"{emp.full_name} already has {existing.status} {existing.leave_type} on this day "
                    f"({existing.start_date} to {existing.end_date}). Change it in Leave.",
         )
-    days = leave_request_days(db, principal.company_id, emp.employee_no, payload.leave_type, payload.date, payload.date)
+    breakdown = leave_day_breakdown(db, principal.company_id, emp.employee_no, payload.leave_type, payload.date, payload.date)
+    days = breakdown["days"]
+    if not days:
+        if breakdown["skipped"].get("holiday"):
+            raise HTTPException(status_code=400, detail=f"{payload.date:%a %d %b} is a public holiday: no leave is needed")
+        # A rota day off or weekend that HR marks as Leave: the rota now says the day is
+        # leave (once saved it is a Leave entry, which counts), so it is one leave day.
+        days = 1
     assert_leave_available(db, principal.company_id, emp, payload.leave_type, payload.date, days)
     req = LeaveRequest(
         company_id=principal.company_id, employee_id=emp.id, leave_type=payload.leave_type,
@@ -1009,6 +1026,8 @@ def leave_entitlement(db: Session, company_id: str, employee_no: str, leave_type
         if flexible or window[0] > leave_year_window(settings, prof.get("join_date"), date.today())[0]:
             until = window[1] - timedelta(days=1)
         earned = accrued_days(settings, yearly, prof.get("join_date"), until)
+        if prof.get("join_date") and prof["join_date"] > on:
+            earned = 0   # not joined by then: a Flexible policy gave the year's days before joining
         if prof.get("carry"):
             window = leave_year_window(settings, prof.get("join_date"), on)
             emp = db.query(Employee.id).filter(Employee.company_id == company_id, Employee.employee_no == employee_no).first()
@@ -1036,8 +1055,26 @@ def assert_leave_available(db: Session, company_id: str, employee: Employee, lea
         on_hold = f" ({pending} more on hold in pending requests)" if pending else ""
         raise HTTPException(
             status_code=400,
-            detail=f"Only {_fmt_days(available)} day(s) of {leave_type} available by {start.isoformat()}{on_hold}; this request is {days}",
+            detail=f"Only {_fmt_days(available)} day(s) of {leave_type} available by {start.isoformat()}{on_hold}; "
+                   f"this request is {days}{_annual_rule_note(db, company_id, employee.employee_no, leave_type)}",
         )
+
+
+def _annual_rule_note(db: Session, company_id: str, employee_no: str, leave_type: str) -> str:
+    """Which leave policy the Annual Leave check used, so HR can see why (e.g. a policy marked
+    Flexible in HR Settings that isn't the one on the employee's record)."""
+    if leave_type != "Annual Leave":
+        return ""
+    policy = (_employee_profiles(db, company_id).get(employee_no) or {}).get("policy") or ""
+    configs = _effective_leave_policy_configs(db, company_id)
+    if not policy:
+        return ". No Leave Policy is set on this employee, so Annual Leave is earned month by month"
+    if policy not in configs:
+        return f". The employee's Leave Policy '{policy}' is not one of HR Settings > Leave Policy, so Annual Leave is earned month by month"
+    if configs[policy].get("flexible"):
+        return f" (Leave Policy '{policy}', Flexible: the whole year's days)"
+    return f". Leave Policy '{policy}' is not Flexible, so Annual Leave is earned month by month"
+
 
 
 def _fmt_days(value: float) -> str:
@@ -1058,6 +1095,7 @@ def leave_days_preview(
     assert_employee_in_scope(principal, emp)
     if end < start:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    assert_leave_dates(start, end)
     return leave_day_breakdown(db, principal.company_id, emp.employee_no, leave_type, start, end)
 
 
@@ -1152,6 +1190,8 @@ def leave_balances(db: Session, company_id: str, employees: list[Employee], on: 
                 if (configs.get(prof.get("policy") or "") or {}).get("flexible") and e.id in windows:
                     earn_until = date.fromisoformat(windows[e.id][1]) - timedelta(days=1)
                 ent, year_ent = accrued_days(settings, yearly, prof.get("join_date"), earn_until), yearly
+                if prof.get("join_date") and prof["join_date"] > on:
+                    ent = 0   # not joined yet (Flexible gave the year's days before joining)
                 if prof.get("carry"):
                     window = (date.fromisoformat(windows[e.id][0]), date.fromisoformat(windows[e.id][1]))
                     deadline = carry_forward_days(settings, prof, window, window[1])[2]

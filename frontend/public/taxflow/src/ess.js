@@ -2316,7 +2316,7 @@
         }).join(', ') + (sd.length > 10 ? ', …' : '');
         skipNote = ' (skips ' + parts.join(', ') + (list ? ': ' + list : '') + ')';
       }
-    } else if (days >= 1 && _essLeaveDays.key !== key) {
+    } else if (days >= 1 && _essLeaveDays.key !== key && s >= '2000' && e >= '2000') {   // not a year still being typed
       _essLeaveDays = {key: key, data: null};
       fetch(apiBase() + '/ess/leave/days?leave_type=' + encodeURIComponent(type) + '&start=' + s + '&end=' + e, {headers: essHeaders()})
         .then(function(r) { return r.ok ? r.json() : null; })

@@ -19812,7 +19812,8 @@ async function updateLeaveDaysPreview(){
   const leaveType=document.getElementById('leave-type')?.value||'';
   const from=document.getElementById('leave-from')?.value||'';
   const to=document.getElementById('leave-to')?.value||'';
-  if(!employeeId||!from||!to||to<from){el.style.display='none';return;}
+  // A year still being typed (0002-…) isn't a date to count yet.
+  if(!employeeId||!from||!to||to<from||from<'2000'||to<'2000'){el.style.display='none';return;}
   const seq=++_leaveDaysSeq;
   try{
     const r=await authenticatedFetch(`${apiBaseUrl()}/leave/days?employee_id=${encodeURIComponent(employeeId)}&leave_type=${encodeURIComponent(leaveType)}&start=${from}&end=${to}`);

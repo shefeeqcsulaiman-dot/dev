@@ -34,6 +34,7 @@ from app.routers.leave import (
     _used_days_by_employee_and_type,
     annual_leave_basis,
     assert_leave_available,
+    assert_leave_dates,
     assert_leave_type_offered,
     attachment_response,
     checked_attachment,
@@ -573,6 +574,7 @@ def ess_leave_days(request: Request, leave_type: str = Query(...), start: date =
     emp = ess_bearer(request, db)
     if end < start:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    assert_leave_dates(start, end)
     return leave_day_breakdown(db, emp.company_id, emp.employee_no, leave_type, start, end)
 
 
@@ -784,6 +786,7 @@ def ess_create_leave(payload: EssLeaveRequestIn, request: Request, db: Session =
         raise HTTPException(status_code=400, detail="Leave can't be requested for dates more than 30 days in the past — contact HR")
     # Same day count (Working-basis policies skip weekends) and the same balance rule as
     # HRMS: the year the leave starts in, with pending requests counted as on hold.
+    assert_leave_dates(payload.start_date, payload.end_date)
     days = leave_request_days(db, emp.company_id, emp.employee_no, payload.leave_type, payload.start_date, payload.end_date)
     assert_leave_available(db, emp.company_id, emp, payload.leave_type, payload.start_date, days)
     attachment, attachment_name = checked_attachment(payload.attachment, payload.attachment_name)

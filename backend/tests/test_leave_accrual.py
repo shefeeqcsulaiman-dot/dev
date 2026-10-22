@@ -69,10 +69,11 @@ def test_working_basis_skips_weekend_holidays_and_rota_days_off(client, db, auth
         # Without a rota: the company weekend applies.
         d = _days(client, auth_headers, no_rota, "Annual Leave", "2026-11-30", "2026-12-06")
         assert d["days"] == 3 and d["skipped"] == {"weekend": 2, "holiday": 2}
-        # Calendar: holidays count, the 3 rota days off (Fri-Sun) do not (2026-10-20)
+        # Calendar: neither the 2 public holidays (2026-10-22) nor the 3 rota days off (Fri-Sun,
+        # 2026-10-20) are counted; the weekend is
         cal = _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")
-        assert cal["days"] == 4 and cal["skipped"] == {"day_off": 3}
-        assert _days(client, auth_headers, no_rota, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 7   # no rota
+        assert cal["days"] == 2 and cal["skipped"] == {"holiday": 2, "day_off": 3}
+        assert _days(client, auth_headers, no_rota, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 5   # no rota
         _settings(client, auth_headers, leave_types=[{"type": "Sick Leave", "days": 90, "basis": "Working"}])
         assert _days(client, auth_headers, emp, "Sick Leave", "2026-11-30", "2026-12-06")["days"] == 2   # its own Basis
     finally:
@@ -182,3 +183,41 @@ def test_flexible_policy_gives_the_whole_year_at_once(client, db, auth_headers):
         assert bal[newcomer.id]["annual_entitlement"] == (int(expected) if float(expected).is_integer() else expected)
     finally:
         _settings(client, auth_headers)
+
+
+def test_joining_month_counts_only_by_the_15th():
+    """HR decision 2026-10-22: joined 1-15 Jul earns July; joined 16-31 Jul starts in August."""
+    s = {"accrual": "Monthly", "year_start": "January"}
+    assert accrued_days(s, 24, date(2026, 7, 15), date(2026, 12, 31)) == 12   # Jul-Dec
+    assert accrued_days(s, 24, date(2026, 7, 16), date(2026, 12, 31)) == 10   # Aug-Dec
+    assert accrued_days(s, 24, date(2026, 7, 28), date(2026, 7, 31)) == 0     # nothing earned in July
+    assert accrued_days(s, 24, date(2020, 7, 28), date(2026, 12, 31)) == 24   # joined in an earlier year
+    rolling = {"accrual": "Monthly", "year_start": "Joining Date (rolling)"}
+    assert accrued_days(rolling, 24, date(2020, 7, 28), date(2027, 7, 27)) == 24   # anniversary years unchanged
+
+
+def test_flexible_gives_nothing_before_joining(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    _settings(client, auth_headers, accrual="Monthly (1/12 per month)", year_start="January",
+              leave_policies=[{"value": "Flexi 30", "days": 30, "basis": "Calendar", "flexible": "Yes"}])
+    later = date.today() + timedelta(days=40)
+    emp = _employee(client, db, auth_headers, cid, leave_policy="Flexi 30", join_date=later.isoformat())
+    try:
+        bal = {b["employee_id"]: b for b in client.get("/api/v1/leave/balance", headers=auth_headers).json()}
+        assert bal[emp.id]["annual_entitlement"] == 0
+    finally:
+        _settings(client, auth_headers)
+
+
+def test_leave_dates_must_be_complete_and_at_most_a_year(client, db, auth_headers):
+    cid = _company_id(client, auth_headers)
+    emp = _employee(client, db, auth_headers, cid, join_date="2020-01-01")
+    r = client.get(f"/api/v1/leave/days?employee_id={emp.id}&leave_type=Annual%20Leave&start=0002-10-11&end=2026-10-22",
+                   headers=auth_headers)
+    assert r.status_code == 400 and "incomplete" in r.json()["detail"]
+    r = client.get(f"/api/v1/leave/days?employee_id={emp.id}&leave_type=Annual%20Leave&start=2025-01-01&end=2026-06-01",
+                   headers=auth_headers)
+    assert r.status_code == 400 and "one year" in r.json()["detail"]
+    r = client.post("/api/v1/leave/requests", headers=auth_headers, json={
+        "employee_id": emp.id, "leave_type": "Annual Leave", "start_date": "0202-02-11", "end_date": "2026-02-19"})
+    assert r.status_code == 400

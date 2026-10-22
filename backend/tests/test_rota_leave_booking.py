@@ -59,3 +59,25 @@ def test_rota_leave_checks_the_balance_and_type(client, db, auth_headers):
     body = {"employee_no": emp.employee_no, "date": _day(80).isoformat()}
     assert client.post("/api/v1/leave/rota-book", headers=auth_headers, json={**body, "leave_type": "Nap Leave"}).status_code == 400
     assert client.post("/api/v1/leave/rota-book", headers=auth_headers, json={**body, "employee_no": "NOPE-1", "leave_type": "Sick Leave"}).status_code == 404
+
+
+def test_rota_day_off_marked_as_leave_counts_one_day(client, db, auth_headers):
+    """Saturday off in the rota, HR marks it Leave (2026-10-22): one leave day, not refused
+    as "all weekend, public holiday or rota days off"."""
+    from tests.test_attendance_monthly_report import _seed_app_record
+
+    cid = _company_id(client, auth_headers)
+    emp = _employee(client, db, auth_headers, cid, join_date="2020-01-01")
+    monday = _day(60)
+    monday -= timedelta(days=monday.weekday())
+    saturday = monday + timedelta(days=5)
+    _seed_app_record(db, cid, "rotaAssignments", f"{emp.employee_no}-{monday}",
+                     {"id": f"{emp.employee_no}-{monday}", "employee_id": emp.employee_no, "date": monday.isoformat(),
+                      "code": "M", "mark": "Shift", "start": "08:00", "end": "17:00"})
+    _seed_app_record(db, cid, "rotaAssignments", f"{emp.employee_no}-{saturday}",
+                     {"id": f"{emp.employee_no}-{saturday}", "employee_id": emp.employee_no, "date": saturday.isoformat(),
+                      "code": "OFF", "mark": "Off"})
+    r = client.post("/api/v1/leave/rota-book", headers=auth_headers,
+                    json={"employee_no": emp.employee_no, "date": saturday.isoformat(), "leave_type": "Annual Leave"})
+    assert r.status_code == 200, r.text
+    assert r.json()["days"] == 1
