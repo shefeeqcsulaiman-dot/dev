@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 import app.cache as cache
 import app.timezone_utils as timezone_utils
@@ -678,6 +679,14 @@ def _ingest_device_punch(
 
 
 async def _record_punch(request: Request, db: Session, current_user: User | None, device_key: str | None) -> dict[str, Any]:
+    """Database work runs in a worker thread, only the body is read on the event loop (see
+    app_data_action): devices push punches every few seconds."""
+    company_id, device_id, device_name = await run_in_threadpool(_punch_source, db, current_user, device_key)
+    raw_data = await _parse_punch_body(request)
+    return await run_in_threadpool(_record_punch_data, db, company_id, device_id, device_name, device_key, raw_data)
+
+
+def _punch_source(db: Session, current_user: User | None, device_key: str | None) -> tuple[str, str | None, str]:
     if current_user:
         company_id = current_user.company_id
         device_name = "Manual"
@@ -689,8 +698,11 @@ async def _record_punch(request: Request, db: Session, current_user: User | None
         device.last_sync = datetime.now(UTC)
     else:
         raise HTTPException(status_code=401, detail="Authentication required")
+    return company_id, device_id, device_name
 
-    raw_data = await _parse_punch_body(request)
+
+def _record_punch_data(db: Session, company_id: str, device_id: str | None, device_name: str,
+                       device_key: str | None, raw_data: dict[str, Any]) -> dict[str, Any]:
     offset = _company_offset(db, company_id)
 
     if _is_wide_report_payload(raw_data):
@@ -935,13 +947,18 @@ async def adms_classic_upload(
     varies on this, it's a best-effort mapping). Bad/unparseable lines are
     skipped rather than failing the whole batch, since one malformed line
     from a device shouldn't drop the rest of its backlog."""
-    device = _get_device_by_serial(db, SN)
+    device = await run_in_threadpool(_get_device_by_serial, db, SN)
     if table.upper() != "ATTLOG":
         # OPERLOG (enrollment/user-management data) or other tables — nothing
         # for us to ingest, just acknowledge so the device doesn't retry forever.
         return PlainTextResponse("OK")
 
     raw = (await request.body()).decode("utf-8", errors="ignore")
+    return PlainTextResponse(f"OK: {await run_in_threadpool(_ingest_attlog, db, device, raw)}")
+
+
+def _ingest_attlog(db: Session, device, raw: str) -> int:
+    """The ATTLOG lines of one /iclock/cdata upload; returns how many were recorded."""
     offset = _company_offset(db, device.company_id)
     count = 0
     for line in raw.splitlines():
@@ -966,7 +983,7 @@ async def adms_classic_upload(
 
     device.last_sync = datetime.now(UTC)
     db.commit()
-    return PlainTextResponse(f"OK: {count}")
+    return count
 
 
 @iclock_router.get("/iclock/getrequest")

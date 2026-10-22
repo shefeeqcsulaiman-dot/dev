@@ -1902,6 +1902,16 @@ async def app_data_action(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> dict[str, object]:
+    # Only reading the body is async. Everything else is blocking database work, run in a
+    # worker thread: on the event loop, one save waiting on a slow database froze every other
+    # request on that worker (2026-10-22: rota saves queued "Saving 3 of 5", one took 97 s).
+    payload = await request.json()
+    return await run_in_threadpool(_app_data_action_run, request, action, payload, db, principal)
+
+
+def _app_data_action_run(
+    request: Request, action: str, payload, db: Session, principal: Principal,
+) -> dict[str, object]:
     # Widened from admin-only in Branch Management Phase 4 — an Employee/
     # branch login can now save/delete records here too, same as the read
     # side (list_collection_records) already was widened to. No branch
@@ -1910,7 +1920,6 @@ async def app_data_action(
     # filtered on here) — that's Phases 5-6's job, once POS/Sales and
     # Inventory/Purchases are ready to consume it.
     company = resolve_principal_company(principal, db)
-    payload = await request.json()
     if action == "save":
         collection = str(payload.get("collection", "app_actions"))
         assert_collection_module_enabled(db, principal, company, collection)
@@ -2209,10 +2218,9 @@ async def app_data_action(
 
         if request.query_params.get("background"):
             return _start_job(request, db, principal, "documents.extract", extract)
-        # Runs in a thread: it can make a blocking OpenAI/Anthropic call (and a
-        # blocking subprocess for PDF rendering) taking up to ~90s, which would
-        # otherwise freeze this whole async worker's event loop for every user.
-        return await run_in_threadpool(extract, db, principal)
+        # Already in a worker thread (app_data_action): the blocking OpenAI/Anthropic call
+        # (up to ~90 s) and PDF rendering don't hold up the event loop.
+        return extract(db, principal)
 
     if action == "invoices.import":
         assert_collection_module_enabled(db, principal, company, "salesInvoices")
@@ -2229,8 +2237,8 @@ async def app_data_action(
 
         if request.query_params.get("background"):
             return _start_job(request, db, principal, "invoices.import", import_invoices)
-        # See documents.extract above: same blocking-AI-call concern applies here.
-        return await run_in_threadpool(import_invoices, db, principal)
+        # See documents.extract above.
+        return import_invoices(db, principal)
 
     return {"ok": True, "action": action}
 
