@@ -1156,6 +1156,8 @@ def ess_cancel_leave(leave_id: str, request: Request, payload: EssLeaveCancelIn 
     req.cancelled_by = emp.full_name
     req.cancel_reason = ((payload.reason if payload else None) or "").strip()[:300] or None
     _ess_audit(db, emp, "leave_cancelled", {"id": req.id, "start": req.start_date, "end": req.end_date})
+    from app.rota_days import clear_rota_leave
+    clear_rota_leave(db, req)
     db.commit()
     return _leave_out(req)
 

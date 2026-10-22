@@ -664,7 +664,7 @@
 
   function _attCorrections() {
     var fixes = (_essRequests || []).filter(function(q) { return q.kind === 'correction'; }).slice(0, 4);
-    return '<div class="att-corr"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div class="card-title" style="font-size:12.5px;margin:0">Correction requests</div>' +
+    return '<div class="att-corr"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div class="card-title" style="font-size:var(--fs-sm);margin:0">Correction requests</div>' +
       '<button class="link-btn" style="margin:0" onclick="essOpenRequestModal(\'correction\')">+ New</button></div>' +
       (fixes.length ? fixes.map(function(q) {
         return '<div class="att-corr-row"><span>' + _dateOrDash(q.date) + ' · ' + escHtml(q.checkin || '—') + ' → ' + escHtml(q.checkout || '—') + '</span><span class="st-badge st-' + _reqStatusClass(q.status) + '">' + escHtml(q.status) + '</span></div>';
@@ -683,7 +683,7 @@
     var d = days.filter(function(x) { return x.date === todayStr; })[0];
     if (!d) {
       el.innerHTML = '<div class="att-today-status">Not checked in yet</div><div class="att-today-sub">No punches recorded today. Use GPS check-in if you are working off-site.</div>' +
-        '<div class="att-today-actions"><button class="btn-login" style="width:auto;padding:9px 18px;font-size:13px" onclick="essGoTab(\'gps\')">GPS Check-In</button></div>';
+        '<div class="att-today-actions"><button class="btn-login" style="width:auto;padding:9px 18px;font-size:var(--fs-md)" onclick="essGoTab(\'gps\')">GPS Check-In</button></div>';
       return;
     }
     var inT = String(d.first.punch_time).substring(11, 16);
@@ -855,10 +855,10 @@
     status = status.charAt(0).toUpperCase() + status.slice(1);
     var gross = (Number(p.basic) || 0) + (Number(p.allowances) || 0) + (Number(p.overtime) || 0);
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Payslip ' + escHtml(_psPeriodLabel(p.period)) + '</title>' +
-      '<style>@page{size:A4;margin:16mm}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:40px}h1{font-size:20px;margin:0}h2{font-size:13px;color:#475569;font-weight:400;margin:4px 0 24px}' +
-      '.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:13px;margin-bottom:24px}.meta b{color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;display:block}' +
-      'table{width:100%;border-collapse:collapse;font-size:14px}td{padding:9px 4px;border-bottom:1px solid #e2e8f0}td.n{text-align:right}tr.b td{font-weight:700;font-size:16px;border-top:2px solid #0f172a;border-bottom:none}tr.g td{font-weight:600;background:#f8fafc}' +
-      '.foot{margin-top:32px;font-size:11px;color:#94a3b8}</style></head><body>' +
+      '<style>@page{size:A4;margin:16mm}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:40px}h1{font-size:var(--fs-xl);margin:0}h2{font-size:var(--fs-md);color:#475569;font-weight:400;margin:4px 0 24px}' +
+      '.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:var(--fs-md);margin-bottom:24px}.meta b{color:#64748b;font-weight:600;font-size:var(--fs-xs);text-transform:uppercase;display:block}' +
+      'table{width:100%;border-collapse:collapse;font-size:var(--fs-md)}td{padding:9px 4px;border-bottom:1px solid #e2e8f0}td.n{text-align:right}tr.b td{font-weight:700;font-size:var(--fs-lg);border-top:2px solid #0f172a;border-bottom:none}tr.g td{font-weight:600;background:#f8fafc}' +
+      '.foot{margin-top:32px;font-size:var(--fs-xs);color:#94a3b8}</style></head><body>' +
       (_essLogoUrl(me) ? '<img src="' + escHtml(_essLogoUrl(me)) + '" alt="" style="max-height:56px;max-width:220px;object-fit:contain;display:block;margin-bottom:10px">' : '') +
       '<h1>' + escHtml(me.company_name || 'Payslip') + '</h1><h2>Payslip — ' + escHtml(_psPeriodLabel(p.period)) + (status ? ' (' + escHtml(status) + ')' : '') + '</h2>' +
       '<div class="meta"><div><b>Employee</b>' + escHtml(me.full_name || '') + '</div><div><b>Employee ID</b>' + escHtml(me.employee_no || '') + '</div>' +
@@ -1074,7 +1074,7 @@
     if (!info) return;
     if (!_essLeaveAttachment) { info.innerHTML = '<span style="color:var(--text3)">Required for sick leave. JPG, PNG or PDF, up to 3 MB.</span>'; return; }
     var a = _essLeaveAttachment;
-    var thumb = /^data:image\//.test(a.data) ? '<img src="' + a.data + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">' : '<span style="font-size:22px">📄</span>';
+    var thumb = /^data:image\//.test(a.data) ? '<img src="' + a.data + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">' : '<span style="font-size:var(--fs-2xl)">📄</span>';
     info.innerHTML = '<div style="display:flex;align-items:center;gap:10px">' + thumb + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.name) + '</span>' +
       '<button type="button" class="link-btn" style="margin:0" onclick="essLeaveAttachClear()">Remove</button></div>';
   }
@@ -1577,16 +1577,16 @@
         if (st === 'cancelled') return ['Cancelled', 'var(--text3)'];
         return ['To do', 'var(--amber)'];
       };
-      box.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:8px">My department\'s tasks <span style="font-weight:400;color:var(--text3);font-size:12px">· ' + rows.length + '</span></div>' +
+      box.innerHTML = '<div style="font-weight:700;font-size:var(--fs-md);margin-bottom:8px">My department\'s tasks <span style="font-weight:400;color:var(--text3);font-size:var(--fs-sm)">· ' + rows.length + '</span></div>' +
         '<div class="card" style="padding:4px 14px">' + rows.slice(0, 60).map(function(t) {
           var s = tone(t.status);
           var overdue = t.due_date && t.due_date < today && s[0] !== 'Done' && s[0] !== 'Cancelled';
           return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
-            '<div style="min-width:0;flex:1"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.title || 'Task') + (t.is_mine ? ' <span style="font-size:11px;color:var(--accent-text,#2563eb)">(you)</span>' : '') + '</div>' +
-              '<div style="font-size:11.5px;color:var(--text3)">' + escHtml(t.assigned_to_name || t.assignee_name || 'Unassigned') +
+            '<div style="min-width:0;flex:1"><div style="font-weight:600;font-size:var(--fs-md);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.title || 'Task') + (t.is_mine ? ' <span style="font-size:var(--fs-xs);color:var(--accent-text,#2563eb)">(you)</span>' : '') + '</div>' +
+              '<div style="font-size:var(--fs-xs);color:var(--text3)">' + escHtml(t.assigned_to_name || t.assignee_name || 'Unassigned') +
                 (t.due_date ? ' · due ' + escHtml(fmtShortDate(t.due_date)) + (overdue ? ' <b style="color:var(--red)">overdue</b>' : '') : '') +
                 (t.priority ? ' · ' + escHtml(t.priority) : '') + '</div></div>' +
-            '<span style="font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;color:' + s[1] + ';background:color-mix(in srgb,' + s[1] + ' 12%,transparent)">' + s[0] + '</span></div>';
+            '<span style="font-size:var(--fs-xs);font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;color:' + s[1] + ';background:color-mix(in srgb,' + s[1] + ' 12%,transparent)">' + s[0] + '</span></div>';
         }).join('') + '</div>';
     } catch (e) { box.innerHTML = ''; }
   }
@@ -1773,10 +1773,10 @@
     var el = document.getElementById('dash-payslip-body');
     if (!el) return;
     var p = (_essData.payslips || [])[0];
-    if (!p) { el.innerHTML = '<div style="font-size:13px;color:var(--text3);padding:6px 0">No payslip yet — it appears here once payroll has been run for you.</div>'; return; }
+    if (!p) { el.innerHTML = '<div style="font-size:var(--fs-md);color:var(--text3);padding:6px 0">No payslip yet — it appears here once payroll has been run for you.</div>'; return; }
     var row = function(label, val, cls) { return '<div class="payslip-row' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span><span>' + (cls === 'neg' && Number(val) ? '− ' : '') + essMoney(val) + '</span></div>'; };
-    el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px"><div style="font-size:12px;color:var(--text3)">' + escHtml(_psPeriodLabel(p.period)) + '</div><span class="st-badge st-' + _psStatusClass(p.run_status) + '">' + escHtml(p.run_status || '') + '</span></div>' +
-      '<div class="ps-net-val" style="font-size:24px;margin-bottom:8px">' + essMoney(p.net_pay) + '</div>' +
+    el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px"><div style="font-size:var(--fs-sm);color:var(--text3)">' + escHtml(_psPeriodLabel(p.period)) + '</div><span class="st-badge st-' + _psStatusClass(p.run_status) + '">' + escHtml(p.run_status || '') + '</span></div>' +
+      '<div class="ps-net-val" style="font-size:var(--fs-2xl);margin-bottom:8px">' + essMoney(p.net_pay) + '</div>' +
       row('Basic', p.basic) + row('Allowances', p.allowances) + row('Overtime', p.overtime) + row('Deductions', p.deductions, 'neg') +
       '<button class="btn-ghost ps-print" style="margin-top:10px" onclick="essGoTab(\'payslips\')">All payslips →</button>';
   }
@@ -1815,7 +1815,7 @@
       } else {
         reqEl.innerHTML = _essRequests.slice(0, 4).map(function(q) { return _reqRowHtml(q, true); }).join('');
         if (_essRequests.length > 4) {
-          reqEl.innerHTML += '<div style="text-align:center;margin-top:4px"><a style="font-size:12.5px;color:var(--accent-text);cursor:pointer" onclick="essGoTab(\'requests\')">View all ' + _essRequests.length + ' →</a></div>';
+          reqEl.innerHTML += '<div style="text-align:center;margin-top:4px"><a style="font-size:var(--fs-sm);color:var(--accent-text);cursor:pointer" onclick="essGoTab(\'requests\')">View all ' + _essRequests.length + ' →</a></div>';
         }
       }
     }
@@ -1916,7 +1916,7 @@
       overlay.innerHTML =
         '<div class="ess-modal" style="max-width:360px">' +
           '<div class="ess-modal-title" id="ess-confirm-title">Confirm</div>' +
-          '<div id="ess-confirm-message" style="font-size:13.5px;color:var(--text2);margin-bottom:20px"></div>' +
+          '<div id="ess-confirm-message" style="font-size:var(--fs-md);color:var(--text2);margin-bottom:20px"></div>' +
           '<div style="display:flex;gap:10px;justify-content:flex-end">' +
             '<button class="btn-ghost" id="ess-confirm-cancel" type="button">Cancel</button>' +
             '<button class="btn-login" id="ess-confirm-ok" type="button" style="width:auto;padding:9px 18px">OK</button>' +
@@ -2060,11 +2060,11 @@
     if (!_essOtElig.length) { el.innerHTML = emptyState('clock', 'No overtime detected', 'Days you work past your standard hours will appear here.'); return; }
     var all = el.dataset.all === '1';
     var list = all ? _essOtElig : _essOtElig.slice(0, 5);
-    el.innerHTML = '<div class="tbl-wrap m-stack" style="border:none"><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Status</th><th></th></tr></thead><tbody>' +
+    el.innerHTML = '<div class="tbl-wrap m-stack" style="border:none"><table class="tbl" style="width:100%;font-size:var(--fs-sm)"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Worked</th><th>Extra</th><th>Eligible OT</th><th>Status</th><th></th></tr></thead><tbody>' +
       list.map(function(r, i) {
         var cls = !r.eligible ? 'rejected' : (r.eligibility.indexOf('Requested') === 0 || r.extra_shift ? 'approved' : 'pending');
-        var act = r.eligible && !r.request_id && !r.extra_shift ? '<button class="btn-ghost" style="padding:5px 10px;font-size:11.5px" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
-        return '<tr><td>' + escHtml(fmtShortDate(r.date)) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + (r.break ? '<div class="m-muted" style="font-size:11px">after ' + escHtml(r.break) + ' break</div>' : '') + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
+        var act = r.eligible && !r.request_id && !r.extra_shift ? '<button class="btn-ghost" style="padding:5px 10px;font-size:var(--fs-xs)" onclick="essRequestOtFromRow(' + i + ')">Request</button>' : '';
+        return '<tr><td>' + escHtml(fmtShortDate(r.date)) + (r.day_type === 'weekend' ? ' <span class="st-badge st-pending">Weekend</span>' : '') + '</td><td>' + escHtml(r.clock_in || '—') + '</td><td>' + escHtml(r.clock_out || '—') + '</td><td>' + escHtml(r.worked) + (r.break ? '<div class="m-muted" style="font-size:var(--fs-xs)">after ' + escHtml(r.break) + ' break</div>' : '') + '</td><td>' + escHtml(r.extra) + '</td><td>' + escHtml(r.eligible_ot) + '</td><td><span class="st-badge st-' + cls + '">' + escHtml(r.eligibility) + '</span></td><td>' + act + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       (_essOtElig.length > 5 ? '<div class="att-more"><button type="button" class="btn-ghost" onclick="var c=document.getElementById(\'ot-elig-content\');c.dataset.all=c.dataset.all===\'1\'?\'\':\'1\';essLoadOtEligibility()">' + (all ? 'Show fewer' : 'Show all ' + _essOtElig.length + ' days') + '</button></div>' : '');
   }
@@ -2522,8 +2522,8 @@
       var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
       var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
       var sub = escHtml(e.designation || '') + (e.status === 'present' && e.check_in ? ' · in ' + escHtml(e.check_in) : '') + (e.status === 'upcoming' && e.starts_at ? ' · starts ' + escHtml(e.starts_at) : '');
-      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:10px;min-width:0">' + teamAvatar(e, 32) + '<div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div></div>' +
-        '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span></div>';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:10px;min-width:0">' + teamAvatar(e, 32) + '<div style="min-width:0"><div style="font-size:var(--fs-md);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div><div style="font-size:var(--fs-xs);color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div></div>' +
+        '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:var(--fs-xs);font-weight:600;white-space:nowrap;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span></div>';
     }).join('');
     el.innerHTML =
       '<div class="att-mini" style="margin-top:0;padding-top:0;border-top:none;grid-template-columns:repeat(4,1fr)">' +
@@ -2555,7 +2555,7 @@
         body.innerHTML = rows.length ? rows.map(function(e) {
           var meta = TEAM_STATUS_META[e.status] || TEAM_STATUS_META.absent;
           var name = escHtml(e.full_name) + (e.is_me ? ' <span style="color:var(--text3)">(You)</span>' : '');
-          var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
+          var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:var(--fs-xs);font-weight:600;background:' + meta.bg + ';color:' + meta.color + '">' + meta.label + '</span>';
           return '<tr><td><div style="display:flex;align-items:center;gap:10px">' + teamAvatar(e, 34) + '<span>' + name + '</span></div></td><td>' + escHtml(e.designation || '') + '</td><td>' + pill + '</td><td>' + (e.check_in || '—') + '</td></tr>';
         }).join('') : '<tr><td colspan="4" class="empty">No teammates found in your department.</td></tr>';
       }
@@ -2596,15 +2596,15 @@
     });
     groups = groups.slice(0, 6);
     if (!groups.length) { box.innerHTML = '<div class="hint" style="margin:0">No upcoming holidays.</div>'; return; }
-    box.innerHTML = '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">Upcoming holidays</div>' + groups.map(function(g) {
+    box.innerHTML = '<div style="font-weight:700;font-size:var(--fs-md);margin-bottom:6px">Upcoming holidays</div>' + groups.map(function(g) {
       var dt = new Date(g.start + 'T00:00:00'), de = new Date(g.end + 'T00:00:00');
       var when = g.days === 1 ? dt.toLocaleDateString('en-GB', {weekday: 'long'})
         : dt.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric'}) + ' – ' + de.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short'}) + ' · ' + g.days + ' days';
       return '<div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">' +
         '<div style="min-width:50px;text-align:center;border-radius:8px;background:#1e3a8a;color:#fff;padding:4px 0;line-height:1.15">' +
-          '<div style="font-size:15px;font-weight:700">' + dt.getDate() + (g.days > 1 ? '<span style="font-size:11px;font-weight:600">–' + de.getDate() + '</span>' : '') + '</div><div style="font-size:10.5px;opacity:.85">' + dt.toLocaleDateString('en-GB', {month: 'short'}) + '</div></div>' +
-        '<div style="min-width:0;flex:1"><div style="font-weight:600">' + escHtml(g.names.join(' & ')) + '</div><div style="font-size:11.5px;color:var(--text3)">' + escHtml(when) + '</div>' +
-          (g.message ? '<div style="font-size:12.5px;color:var(--text2);margin-top:2px">' + escHtml(g.message) + '</div>' : '') + '</div></div>';
+          '<div style="font-size:var(--fs-lg);font-weight:700">' + dt.getDate() + (g.days > 1 ? '<span style="font-size:var(--fs-xs);font-weight:600">–' + de.getDate() + '</span>' : '') + '</div><div style="font-size:var(--fs-xs);opacity:.85">' + dt.toLocaleDateString('en-GB', {month: 'short'}) + '</div></div>' +
+        '<div style="min-width:0;flex:1"><div style="font-weight:600">' + escHtml(g.names.join(' & ')) + '</div><div style="font-size:var(--fs-xs);color:var(--text3)">' + escHtml(when) + '</div>' +
+          (g.message ? '<div style="font-size:var(--fs-sm);color:var(--text2);margin-top:2px">' + escHtml(g.message) + '</div>' : '') + '</div></div>';
     }).join('');
   }
 

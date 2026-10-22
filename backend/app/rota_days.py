@@ -192,3 +192,37 @@ def rota_day_shifts(db: Session, company_id: str, employee_nos, start: date, end
             extra=code == EXTRA_SHIFT_CODE,
         )
     return out
+
+
+def clear_rota_leave(db: Session, req) -> int:
+    """Leave that is cancelled, rejected or deleted no longer shows on the rota: the rota's own
+    Leave entries (Mark As: Leave) on its days are removed, except on a day another pending or
+    approved leave of the same employee still covers. Removed, not turned into Off: the day goes
+    back to whatever the rota says around it. Returns how many entries were removed; the caller
+    commits."""
+    from app.models import Employee, LeaveRequest
+
+    emp = db.query(Employee.employee_no).filter(Employee.id == req.employee_id).first()
+    start, end = str(req.start_date or "")[:10], str(req.end_date or req.start_date or "")[:10]
+    if not emp or not emp[0] or not start or not end or end < start:
+        return 0
+    others = (
+        db.query(LeaveRequest.start_date, LeaveRequest.end_date)
+        .filter(LeaveRequest.company_id == req.company_id, LeaveRequest.employee_id == req.employee_id,
+                LeaveRequest.id != req.id, LeaveRequest.status.in_(("pending", "approved")),
+                LeaveRequest.start_date <= end, LeaveRequest.end_date >= start)
+        .all()
+    )
+    ids = [
+        rid for rid, day in db.query(RotaRecord.id, RotaRecord.day).filter(
+            RotaRecord.company_id == req.company_id, RotaRecord.employee_no == emp[0],
+            RotaRecord.day >= start, RotaRecord.day <= end, RotaRecord.kind == "leave")
+        if not any(str(lo)[:10] <= day <= str(hi or lo)[:10] for lo, hi in others)
+    ]
+    if not ids:
+        return 0
+    for record in db.query(AppDataRecord).filter(AppDataRecord.id.in_(ids)).all():
+        db.delete(record)  # app/record_mirror.py drops the rota_records row with it
+    from app.routers.app_data import _invalidate_write_caches
+    _invalidate_write_caches("rotaAssignments", req.company_id)
+    return len(ids)

@@ -11,6 +11,7 @@ from app.department_scope import assert_employee_in_scope, scope_employee_query
 from app.database import get_db
 from app.dependencies import Principal, require_module, require_principal_permission
 from app.models import AppDataRecord, Employee, LeaveRequest
+from app.rota_days import clear_rota_leave
 
 router = APIRouter(prefix="/leave", tags=["leave"], dependencies=[Depends(require_module("hrms"))])
 
@@ -764,6 +765,7 @@ def reject_leave_request(
     _set_approver(req, principal)
     req.approved_at = datetime.now(timezone.utc)
     db.add(req)
+    clear_rota_leave(db, req)
     db.commit()
     emp = db.query(Employee).filter(Employee.id == req.employee_id).first()
     return _out(req, emp)
@@ -787,6 +789,7 @@ def cancel_leave_request(
     req.cancelled_by = principal.display_name or ("HR" if principal.kind == "user" else "HRMS user")
     req.cancel_reason = ((payload.reason if payload else None) or "").strip()[:300] or None
     db.add(req)
+    clear_rota_leave(db, req)
     db.commit()
     emp = db.query(Employee).filter(Employee.id == req.employee_id).first()
     return _out(req, emp)
@@ -921,6 +924,7 @@ def delete_leave_request(
             status_code=400,
             detail="An approved leave request cannot be deleted directly — cancel it instead so the change stays on record.",
         )
+    clear_rota_leave(db, req)
     db.delete(req)
     db.commit()
 

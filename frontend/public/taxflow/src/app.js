@@ -5653,8 +5653,13 @@ async function apiRequest(action,payload,options={}){
         // signal mid-upload) is retried like a busy server: saves are by record key, so a retry
         // can't duplicate one, and a moment later the connection is usually back.
         const dropped=!err?.status&&!err?.timedOut&&(err instanceof TypeError||/failed to fetch|load failed|network/i.test(String(err?.message||'')));
-        const busy=err?.status===503||err?.status===429||err?.timedOut||dropped;
-        if(!busy||attempt>=_WRITE_MAX_RETRIES){
+        // A gateway timeout (504) or bad gateway (502, a worker restarting) means the database
+        // stalled behind the load balancer: retried once, not three times, since a 504 has
+        // already kept the person waiting. A save that did go through is matched by record key
+        // and by the same-person edit-conflict rule, so the retry can't duplicate or refuse it.
+        const gateway=err?.status===504||err?.status===502;
+        const busy=err?.status===503||err?.status===429||err?.timedOut||dropped||gateway;
+        if(!busy||attempt>=(gateway?1:_WRITE_MAX_RETRIES)){
           // A create-only save that already failed once as "busy" may have gone through on that
           // attempt: don't report it as a plain duplicate.
           if(attempt>0&&err?.status===409&&payload?.create_only&&!err.conflict){
@@ -15264,9 +15269,11 @@ async function saveVendorRecordsInChunks(records){
 
 async function savePurchaseRecordsInChunks(records,onProgress){
   // Reduce chunk size to 1 when records carry source_image (compressed base64)
-  // to keep individual HTTP request bodies small
+  // to keep individual HTTP request bodies small. Otherwise 25: each purchase posts to
+  // the ledger (~50 queries a record), so 500 at once ran ~25,000 queries in one request,
+  // long enough for the load balancer to give up (504) on a busy database.
   const hasImages=records.some(r=>r.source_image);
-  const chunkSize=hasImages?1:500;
+  const chunkSize=hasImages?1:25;
   for(let index=0;index<records.length;index+=chunkSize){
     const chunk=records.slice(index,index+chunkSize);
     try{
@@ -22989,7 +22996,28 @@ function _rotaLeaveMap(){
     }
   }
   _rotaLeaveSrc=_leaveRequestsCache;_rotaLeaveByDay=map;
+  _dropCancelledRotaLeave(map);
   return map;
+}
+// Leave cancelled or rejected (here, in ESS, or by someone else) no longer shows on the rota:
+// the server removes its rota Leave marks (rota_days.clear_rota_leave), and this copy drops them
+// too, except on a day other pending or approved leave still covers.
+function _dropCancelledRotaLeave(active){
+  if(typeof rotaAssignmentsById==='undefined'||!rotaAssignmentsById.size)return;
+  const gone=new Set();
+  for(const r of _leaveRequestsCache||[]){
+    if((r.status!=='cancelled'&&r.status!=='rejected')||!r.employee_no||!r.start_date)continue;
+    const d=new Date(`${String(r.start_date).slice(0,10)}T00:00:00`),end=new Date(`${String(r.end_date||r.start_date).slice(0,10)}T00:00:00`);
+    for(let n=0;d<=end&&n<370;n++){
+      const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      if(!active.has(`${r.employee_no}|${iso}`))gone.add(rotaAssignmentId(r.employee_no,iso));
+      d.setDate(d.getDate()+1);
+    }
+  }
+  gone.forEach(id=>{
+    const a=rotaAssignmentsById.get(id);
+    if(a&&(a.mark==='Leave'||String(a.code||'').toUpperCase()==='L'))rotaAssignmentsById.delete(id);
+  });
 }
 // The Rota needs the leave list even when the Leave screen hasn't been opened yet, and a
 // request made in ESS since then: fetched again at most every 30 s (Refresh: right away), and
@@ -24540,6 +24568,10 @@ function deleteHoliday(id){
   if(row)row.remove();
   if(tbody&&!tbody.children.length)emptyTableMessage(tbody,'No holidays added yet.');
   deleteServer('hrHolidays',{id});
+  // The rota reads the Holiday Calendar from _holidayRecords: a removed holiday leaves it now,
+  // not on the next reload.
+  if(Array.isArray(_holidayRecords)){_holidayRecords=_holidayRecords.filter(h=>h.id!==id);_holidayMapCache={at:0,map:null};}
+  if(typeof renderRotaBoards==='function')renderRotaBoards();
 }
 
 // HRMS dashboard: the next holidays with their message to staff.
