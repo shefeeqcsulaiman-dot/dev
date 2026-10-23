@@ -797,14 +797,51 @@ function nextEmployeeId(){
   return `EMP-${String(max+1).padStart(3,'0')}`;
 }
 
+// Branch: the saved branch; with none, the location only when it is one of the branches (older
+// records kept the branch there). Never a made-up "(not in list)" branch from the location.
+function _setEmpBranch(emp){
+  const el=document.getElementById('emp-branch');
+  if(!el)return;
+  if(emp?.branch){_setSelectKeepingValue(el,emp.branch);return;}
+  const loc=String(emp?.location||'').trim();
+  const real=loc&&[...el.options].find(o=>!o.dataset.keptValue&&o.value&&(o.value===loc||o.textContent.trim()===loc));
+  _setSelectKeepingValue(el,real?real.value:'');
+}
+
+// Sets a <select> to a saved value: empty -> the blank choice (or nothing selected), a value
+// missing from the list -> added as "<value> (not in list)" so saving the form keeps it.
+function _setSelectKeepingValue(el,val){
+  if(!el)return;
+  const v=String(val??'').trim();
+  if(!v){
+    const blank=[...el.options].find(o=>o.value==='');
+    if(blank)el.value='';else el.selectedIndex=-1;
+    return;
+  }
+  let opt=[...el.options].find(o=>o.value===v||o.textContent.trim()===v);
+  if(!opt){
+    opt=document.createElement('option');
+    opt.value=v;
+    opt.textContent=`${v} (not in list)`;
+    opt.dataset.keptValue='1';
+    el.appendChild(opt);
+  }
+  el.value=opt.value;
+}
+
 function employeeFormValue(id,fallback=''){
   return document.getElementById(id)?.value.trim()||fallback;
 }
 
 function openEmpEdit(emp){
-  // Pre-fill all m-emp fields with existing employee data
+  // Pre-fill all m-emp fields with existing employee data. The option lists are built first;
+  // a dropdown used to keep whatever it showed before (often the last employee opened) when this
+  // employee's value was empty or not in the list, and Save then wrote that onto this employee
+  // (e.g. the Leave Policy changed on every edit). Now: empty stays empty, and a saved value
+  // that isn't in the list is kept as its own option.
+  _populateEmpSelects();
   const setV=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
-  const setSel=(id,val)=>{const el=document.getElementById(id);if(el&&val){const opt=[...el.options].find(o=>o.value===val||o.textContent===val);if(opt)el.value=opt.value;}};
+  const setSel=(id,val)=>_setSelectKeepingValue(document.getElementById(id),val);
   setV('emp-id',emp.id);
   setV('emp-name',emp.name);
   setV('emp-nickname',emp.nickname);
@@ -818,7 +855,7 @@ function openEmpEdit(emp){
   setV('emp-transport-allowance',emp.transport_allowance||0);
   setV('emp-other-allowance',emp.other_allowance||0);
   setSel('emp-contract',emp.contract);
-  setSel('emp-branch',emp.branch||emp.location);
+  _setEmpBranch(emp);
   // pre-filter roles then set saved role
   filterEmpRoles();
   setV('emp-role',emp.role_id||'');
@@ -872,9 +909,8 @@ function openEmpEdit(emp){
   if(titleEl)titleEl.textContent='Edit Employee';
   if(subEl)subEl.textContent=`Editing ${emp.name||'employee'} — ${emp.id||''}`;
   if(btnEl)btnEl.textContent='Save Changes';
-  _populateEmpSelects();
   setSel('emp-department',emp.department);
-  setSel('emp-branch',emp.branch||emp.location);
+  _setEmpBranch(emp);
   filterEmpRoles();
   setV('emp-role',emp.role_id||'');
   showM('m-emp');
@@ -21172,6 +21208,8 @@ function _getBranchNames(){
 }
 
 function _populateEmpSelects(){
+  // A value kept for the last employee opened (_setSelectKeepingValue) is not a real choice.
+  document.querySelectorAll('#m-emp option[data-kept-value]').forEach(o=>o.remove());
   const deptSel=document.getElementById('emp-department');
   if(deptSel){
     const cur=deptSel.value;
@@ -21190,7 +21228,7 @@ function _populateEmpSelects(){
       (branches.length
         ?branches.map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')
         :'<option disabled>No branches — add in HR Settings</option>');
-    if(cur)branchSel.value=cur;
+    if(cur)_setSelectKeepingValue(branchSel,cur);
   }
   const leaveSel=document.getElementById('emp-leave-policy');
   if(leaveSel){
@@ -21200,7 +21238,7 @@ function _populateEmpSelects(){
       (options.length
         ?options.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')
         :'<option disabled>No leave policies — add in HR Settings &gt; Leave Policy</option>');
-    if(cur)leaveSel.value=cur;
+    if(cur)_setSelectKeepingValue(leaveSel,cur);
   }
   if(document.getElementById('emp-role'))filterEmpRoles();
 }
@@ -23360,7 +23398,21 @@ async function refreshSupportBadge(){
     if(badge.classList.contains('hm-badge'))badge.style.display=n?'':'none';else badge.hidden=!n;
   }catch(e){}
 }
-window.addEventListener('load',()=>{if(localStorage.getItem('taxflow_token')){setTimeout(refreshSupportBadge,2500);setInterval(refreshSupportBadge,120000);}});
+// Checked every 5 minutes while the tab is in view, and when it comes back into view: every
+// open tab asking every 2 minutes, all day, was a fifth of all live traffic (2026-10-23).
+let _supportCheckedAt=0;
+function _supportBadgeTick(force){
+  if(document.hidden)return;
+  if(!force&&Date.now()-_supportCheckedAt<60000)return;
+  _supportCheckedAt=Date.now();
+  refreshSupportBadge();
+}
+window.addEventListener('load',()=>{
+  if(!localStorage.getItem('taxflow_token'))return;
+  setTimeout(()=>_supportBadgeTick(true),2500);
+  setInterval(()=>_supportBadgeTick(true),300000);
+  document.addEventListener('visibilitychange',()=>_supportBadgeTick(false));
+});
 function assignmentFor(staff,date,day){
   const existing=rotaAssignmentsById.get(rotaAssignmentId(staff.id,date));
   // A Holiday Calendar day the employee isn't working shows as that holiday (dark blue).

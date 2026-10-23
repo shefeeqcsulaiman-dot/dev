@@ -167,7 +167,14 @@ def ess_bearer(request: Request, db: Session = Depends(get_db)) -> Employee:
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing ESS token")
     token = auth[7:]
-    emp = _get_employee_from_token(token, db)
+    # /ess/start runs ~18 handlers in one request, each asking for the employee: the token is
+    # checked once per request (2 queries), not once per handler.
+    cached = getattr(request.state, "ess_employee", None)
+    if cached and cached[0] == token and cached[1] is db:
+        emp = cached[2]
+    else:
+        emp = _get_employee_from_token(token, db)
+        request.state.ess_employee = (token, db, emp)
     # Same key as this employee's HRMS principal (Principal.actor_key): changes made
     # from ESS count as theirs in the app-data edit-conflict check.
     db.info["actor"] = (f"emp:{emp.id}", emp.full_name)

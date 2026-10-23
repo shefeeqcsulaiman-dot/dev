@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, true
 from sqlalchemy.orm import Session
 
+from app.request_memo import memo
 from app.auth_principal import resolve_active_branch
 from app.department_scope import assert_employee_in_scope, scope_employee_query
 from app.database import get_db
@@ -68,7 +69,7 @@ def _working_days_count(start: date, end: date) -> int:
     return days
 
 
-def _effective_leave_policy_configs(db: Session, company_id: str) -> dict[str, dict]:
+def _effective_leave_policy_configs_read(db: Session, company_id: str) -> dict[str, dict]:
     """policy value -> {"days": int, "basis": "Calendar"|"Working"}, merging
     the hardcoded defaults above with whatever an admin has actually saved
     in HR Settings > Leave Policy (the "hrLeavePolicy" blob's leave_policies
@@ -113,6 +114,11 @@ def _effective_leave_policy_configs(db: Session, company_id: str) -> dict[str, d
             # leave year instead of being earned month by month (leave_entitlement()).
             cfg["flexible"] = str(entry.get("flexible") or "").strip().lower() == "yes"
     return configs
+
+
+def _effective_leave_policy_configs(db: Session, company_id: str) -> dict[str, dict]:
+    """_effective_leave_policy_configs_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_effective_leave_policy_configs", company_id), lambda: _effective_leave_policy_configs_read(db, company_id))
 
 
 def _employee_leave_policies(db: Session, company_id: str) -> dict[str, str]:
@@ -172,7 +178,7 @@ _DEFAULT_LEAVE_TYPE_CAPS = {
 _UNCAPPED_LEAVE_TYPES = {"Unpaid Leave", "Work From Home"}
 
 
-def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
+def _leave_type_caps_read(db: Session, company_id: str) -> dict[str, int]:
     """leave_type -> configured day cap, from HR Settings > Leave Types
     (the "hrLeavePolicy" blob's leave_types list) — falls back to the
     defaults above for any type the admin hasn't customized."""
@@ -203,6 +209,11 @@ def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
     return caps
 
 
+def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
+    """_leave_type_caps_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_leave_type_caps", company_id), lambda: _leave_type_caps_read(db, company_id))
+
+
 # ── Day counting and entitlement by policy (2026-10-17) ─────────────────────
 # Leave days: a request counts calendar days, or -- on a Working basis -- skips the
 # company's weekend (HR Rules > Weekend Policy), Holiday Calendar days and the employee's
@@ -211,7 +222,7 @@ def _leave_type_caps(db: Session, company_id: str) -> dict[str, int]:
 # Entitlement: a policy's yearly days are earned by HR Settings > Accrual from the
 # employee's join date, within the leave year set by "Leave year start".
 
-def _leave_settings(db: Session, company_id: str) -> dict:
+def _leave_settings_read(db: Session, company_id: str) -> dict:
     row = db.query(AppDataRecord).filter(
         AppDataRecord.company_id == company_id, AppDataRecord.collection == "hrLeavePolicy",
         AppDataRecord.record_key == "leave-policy",
@@ -223,6 +234,11 @@ def _leave_settings(db: Session, company_id: str) -> dict:
     except (TypeError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _leave_settings(db: Session, company_id: str) -> dict:
+    """_leave_settings_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_leave_settings", company_id), lambda: _leave_settings_read(db, company_id))
 
 
 def _leave_type_basis(settings: dict, leave_type: str) -> str | None:
@@ -300,7 +316,7 @@ def _annual_used_before(db: Session, company_id: str, employee_id: str, window: 
     return int(total or 0)
 
 
-def _employee_profiles(db: Session, company_id: str) -> dict[str, dict]:
+def _employee_profiles_read(db: Session, company_id: str) -> dict[str, dict]:
     """employee_no -> {"policy": str, "join_date": date | None} from the employees records."""
     out: dict[str, dict] = {}
     for row in db.query(AppDataRecord).filter(AppDataRecord.company_id == company_id,
@@ -320,6 +336,11 @@ def _employee_profiles(db: Session, company_id: str) -> dict[str, dict]:
                            "carry": _to_float(data.get("leave_carry_forward")),
                            "carry_entered": _parse_date(data.get("leave_carry_entered"))}
     return out
+
+
+def _employee_profiles(db: Session, company_id: str) -> dict[str, dict]:
+    """_employee_profiles_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_employee_profiles", company_id), lambda: _employee_profiles_read(db, company_id))
 
 
 _MONTHS = {"January": 1, "April": 4, "July": 7, "October": 10}
@@ -460,7 +481,7 @@ def leave_window_for(db: Session, company_id: str, employee_no: str, on: date,
     return ws.isoformat(), we.isoformat()
 
 
-def inactive_leave_types(db: Session, company_id: str) -> set[str]:
+def inactive_leave_types_read(db: Session, company_id: str) -> set[str]:
     """Leave types switched off (Status = Inactive) in HR Settings > Leave Policy > Leave
     Types: new requests for them are refused. Existing requests and history are untouched."""
     row = (
@@ -483,6 +504,11 @@ def inactive_leave_types(db: Session, company_id: str) -> set[str]:
         for entry in ((data.get("leave_types") or []) if isinstance(data, dict) else [])
         if isinstance(entry, dict) and str(entry.get("status") or "").strip().lower() == "inactive"
     } - {""}
+
+
+def inactive_leave_types(db: Session, company_id: str) -> set[str]:
+    """inactive_leave_types_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("inactive_leave_types", company_id), lambda: inactive_leave_types_read(db, company_id))
 
 
 def assert_leave_type_offered(db: Session, company_id: str, leave_type: str) -> None:

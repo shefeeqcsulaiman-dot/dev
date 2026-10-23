@@ -32,6 +32,7 @@ from starlette.concurrency import run_in_threadpool
 import app.cache as cache
 import app.timezone_utils as timezone_utils
 from app import attendance_store, biotime_client, biotime_sync, crypto
+from app.request_memo import memo
 from app.attendance_store import _pair_day_punches
 from app.database import get_db
 from app.auth_principal import resolve_active_branch
@@ -142,9 +143,14 @@ def _local_today(offset: timedelta = _DEVICE_UTC_OFFSET):
     return (datetime.now(UTC) + offset).date()
 
 
-def _company_offset(db: Session, company_id: str) -> timedelta:
+def _company_offset_read(db: Session, company_id: str) -> timedelta:
     country = db.query(Company.country).filter(Company.id == company_id).scalar()
     return timezone_utils.company_utc_offset(country)
+
+
+def _company_offset(db: Session, company_id: str) -> timedelta:
+    """_company_offset_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_company_offset", company_id), lambda: _company_offset_read(db, company_id))
 
 
 def _get_device_company(x_device_key: str, db: Session) -> tuple[str, BiometricDevice]:
@@ -1517,7 +1523,7 @@ def attendance_trend(
     return {"dates": dates, "counts": counts}
 
 
-def _weekend_day_set(db: Session, company_id: str) -> set[int] | None:
+def _weekend_day_set_read(db: Session, company_id: str) -> set[int] | None:
     """Reads the same hr_settings weekend-policy-config record app.js's
     _companyWeekendDaySet() writes (HR Settings > HR Rules > Weekend
     Policy) — {0,6} (Sat/Sun) by default, {5,6} for Fri/Sat, or None for
@@ -1543,7 +1549,12 @@ def _weekend_day_set(db: Session, company_id: str) -> set[int] | None:
     return {0, 6}
 
 
-def _standard_hours_per_day(db: Session, company_id: str) -> float:
+def _weekend_day_set(db: Session, company_id: str) -> set[int] | None:
+    """_weekend_day_set_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_weekend_day_set", company_id), lambda: _weekend_day_set_read(db, company_id))
+
+
+def _standard_hours_per_day_read(db: Session, company_id: str) -> float:
     row = db.query(AppDataRecord.payload).filter(
         AppDataRecord.company_id == company_id,
         AppDataRecord.collection == "hr_settings",
@@ -1555,6 +1566,11 @@ def _standard_hours_per_day(db: Session, company_id: str) -> float:
         except (ValueError, TypeError, AttributeError):
             pass
     return 8.0
+
+
+def _standard_hours_per_day(db: Session, company_id: str) -> float:
+    """_standard_hours_per_day_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_standard_hours_per_day", company_id), lambda: _standard_hours_per_day_read(db, company_id))
 
 
 def _ot_cooloff_seconds(db: Session, company_id: str) -> int:
@@ -1634,7 +1650,7 @@ def _shift_paid_seconds(row: Any, shift: DayShift | None, offset: timedelta) -> 
     return max(0, counted - max(0, shift.break_seconds - gaps))
 
 
-def _holiday_dates(db: Session, company_id: str) -> set[str]:
+def _holiday_dates_read(db: Session, company_id: str) -> set[str]:
     """Holiday Calendar dates (hrHolidays) in ISO form; other formats are skipped.
     Whole rows, not the payload column: holidays are stored in their own table
     (app/record_payloads.py STORED_IN_TABLE) and the column is empty; row.payload
@@ -1653,6 +1669,11 @@ def _holiday_dates(db: Session, company_id: str) -> set[str]:
     return out
 
 
+def _holiday_dates(db: Session, company_id: str) -> set[str]:
+    """_holiday_dates_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_holiday_dates", company_id), lambda: _holiday_dates_read(db, company_id))
+
+
 def _shift_standard_seconds(shift: DayShift | None, default_seconds: int) -> int:
     """A day's standard: the shift's own length (end - start - break), else the company standard.
     An Extra shift has none: every hour worked on it is overtime."""
@@ -1662,7 +1683,7 @@ def _shift_standard_seconds(shift: DayShift | None, default_seconds: int) -> int
     return length if length else default_seconds
 
 
-def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
+def _late_rules_read(db: Session, company_id: str) -> tuple[str, int]:
     """(standard_start_time "HH:MM", grace_minutes) for the Late Coming
     Report -- a separate hr_settings record from ot-rules-config (OT is
     about hours worked beyond standard; this is about arrival time, an
@@ -1684,6 +1705,11 @@ def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
         except (ValueError, TypeError, AttributeError):
             pass
     return "09:00", 0
+
+
+def _late_rules(db: Session, company_id: str) -> tuple[str, int]:
+    """_late_rules_read(), read once per request (app/request_memo.py)."""
+    return memo(db, ("_late_rules", company_id), lambda: _late_rules_read(db, company_id))
 
 
 def _format_duration_hm(seconds: int | float | None) -> str:
