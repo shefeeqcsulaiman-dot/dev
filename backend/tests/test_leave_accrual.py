@@ -81,6 +81,12 @@ def test_working_basis_skips_weekend_holidays_and_rota_days_off(client, db, auth
             db.get(AppDataRecord, rid).payload = payload
         db.commit()
         _settings(client, auth_headers)
+        # The holidays are company-wide: left behind, they turned any later test's leave on
+        # 2-3 Dec into "no leave days to request" (test_leave_cancel books 40 days ahead).
+        for hid in ("la-hol-1202", "la-hol-1203"):
+            r = client.post("/api/v1/app-data", headers=auth_headers, params={"action": "delete"},
+                            json={"collection": "hrHolidays", "record": {"id": hid}})
+            assert r.status_code == 200, r.text
 
 
 def test_leave_year_windows():
