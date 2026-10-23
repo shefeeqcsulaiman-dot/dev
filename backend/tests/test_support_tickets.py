@@ -57,3 +57,27 @@ def test_ticket_input_and_who_can_raise(client, db, auth_headers):
     # Super Admin answers tickets, it does not raise them
     assert client.post("/api/v1/support/tickets", headers=sa, json=base).status_code == 403
     assert client.get("/api/v1/superadmin/support/tickets", headers=auth_headers).status_code == 403
+
+
+def test_super_admin_status_tab_counts(client, db, auth_headers):
+    """Super Admin's status tabs (2026-10-23): GET /superadmin/support/counts gives tickets and
+    unread tickets per status, with the list's search, matching what each tab lists."""
+    _login_client_ref["client"] = client
+    sa = _make_superadmin(db)
+    ids = []
+    for subject in ("Tabcount A payroll", "Tabcount B rota", "Tabcount C leave"):
+        r = client.post("/api/v1/support/tickets", headers=auth_headers, json={
+            "subject": subject, "category": "Question", "priority": "Normal", "message": "Help please."})
+        assert r.status_code == 201, r.text
+        ids.append(r.json()["id"])
+    client.post(f"/api/v1/superadmin/support/tickets/{ids[1]}/status", headers=sa, json={"status": "resolved"})
+    client.post(f"/api/v1/superadmin/support/tickets/{ids[2]}/status", headers=sa, json={"status": "closed"})
+
+    data = client.get("/api/v1/superadmin/support/counts?q=Tabcount", headers=sa).json()
+    assert data["counts"] == {"open": 1, "in_progress": 0, "resolved": 1, "closed": 1}
+    assert data["unread"]["open"] == 1
+    for status, n in data["counts"].items():
+        listed = client.get(f"/api/v1/superadmin/support/tickets?status={status}&q=Tabcount", headers=sa).json()
+        assert len(listed) == n, status
+    # Company users can't read it
+    assert client.get("/api/v1/superadmin/support/counts", headers=auth_headers).status_code in (401, 403)

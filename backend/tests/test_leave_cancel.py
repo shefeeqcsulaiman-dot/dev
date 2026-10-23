@@ -45,7 +45,9 @@ def _annual_used(client, headers):
 
 
 def _future(days):
-    return date.today() + timedelta(days=days)
+    # a real leave day (weekday, not a saved public holiday): see tests/leave_dates.py
+    from tests.leave_dates import leave_day
+    return leave_day(days)
 
 
 def test_hr_cancels_approved_leave_and_balance_is_restored(client, db, auth_headers):

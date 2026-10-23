@@ -232,6 +232,13 @@
     .drawer-body{flex:1;overflow-y:auto;padding:18px 22px;}
     .drawer-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
     .drawer-row:last-child{border-bottom:none;}
+    /* Support Tickets: one tab per status, each with its count (and how many are unread). */
+    .sup-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin-bottom:12px}
+    .sup-tab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+    .sup-tab:hover{color:var(--text)}
+    .sup-tab.on{color:var(--primary-ink);border-bottom-color:var(--primary)}
+    .sup-tab .n{font-size:11.5px;font-weight:700;min-width:20px;padding:1px 7px;border-radius:99px;background:var(--primary-soft);color:var(--primary-ink);text-align:center}
+    .sup-tab .u{font-size:11px;font-weight:700;color:#fff;background:var(--primary);border-radius:99px;padding:1px 6px}
   </style>
 </head>
 <body>
@@ -692,8 +699,9 @@
       </div>
       <button class="btn btn-g btn-sm" onclick="loadSupportTickets()">Refresh</button>
     </div>
+    <div class="sup-tabs" id="sa-sup-tabs" role="tablist" aria-label="Ticket status"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-      <select class="fi" id="sa-sup-status" style="max-width:170px" onchange="loadSupportTickets()"><option value="active">Open &amp; in progress</option><option value="">All</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+      <input type="hidden" id="sa-sup-status" value="active">
       <input class="fi" id="sa-sup-q" placeholder="Search subject, company or person…" style="max-width:260px" onkeydown="if(event.key==='Enter')loadSupportTickets()">
     </div>
     <div id="sa-sup-wrap"><div class="loading-state">Loading…</div></div>
@@ -2670,7 +2678,31 @@
       if(b){b.textContent=n;b.style.display=n?'':'none';}
     }catch(e){}
   }
+  // Status tabs (were a dropdown): Open & in progress, Open, In progress, Resolved, Closed, All,
+  // each with its count and unread count from GET /superadmin/support/counts (same search).
+  const SA_SUP_TABS=[['active','Open & in progress'],['open','Open'],['in_progress','In progress'],['resolved','Resolved'],['closed','Closed'],['','All']];
+  let _saSupCounts=null;
+  function renderSupportTabs(data){
+    const el=document.getElementById('sa-sup-tabs'); if(!el)return;
+    const cur=document.getElementById('sa-sup-status').value;
+    const c=data?.counts||{}, u=data?.unread||{};
+    const sum=(keys,src)=>keys.reduce((a,k)=>a+(src[k]||0),0);
+    const keysFor=v=>v==='active'?['open','in_progress']:v?[v]:Object.keys(SA_SUP_STATUS);
+    el.innerHTML=SA_SUP_TABS.map(([v,label])=>{
+      const n=data?sum(keysFor(v),c):null, unread=data?sum(keysFor(v),u):0;
+      return `<button type="button" role="tab" class="sup-tab${v===cur?' on':''}" aria-selected="${v===cur}" onclick="setSupportTab('${v}')">${escHtml(label)}${n!=null?`<span class="n">${n}</span>`:''}${unread?`<span class="u" title="${unread} with new messages">${unread} new</span>`:''}</button>`;
+    }).join('');
+  }
+  function setSupportTab(v){document.getElementById('sa-sup-status').value=v;loadSupportTickets();}
+  async function loadSupportCounts(){
+    try{
+      const r=await apiFetch('/superadmin/support/counts?'+new URLSearchParams({q:document.getElementById('sa-sup-q').value.trim()}));
+      _saSupCounts=r.ok?await r.json():null; renderSupportTabs(_saSupCounts);
+    }catch(e){renderSupportTabs(_saSupCounts);}
+  }
   async function loadSupportTickets(){
+    renderSupportTabs(_saSupCounts);
+    loadSupportCounts();
     const wrap=document.getElementById('sa-sup-wrap'); if(!wrap)return;
     const params=new URLSearchParams({status:document.getElementById('sa-sup-status').value,q:document.getElementById('sa-sup-q').value.trim()});
     try{

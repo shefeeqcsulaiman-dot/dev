@@ -245,6 +245,24 @@ def all_tickets(
     return [_ticket_out(t, name, side="support") for t, name in rows]
 
 
+@router.get("/superadmin/support/counts")
+def ticket_counts(q: str = Query(default=""), db: Session = Depends(get_db), _: User = Depends(_require_superadmin)) -> dict:
+    """Tickets per status (and unread per status) for Super Admin's status tabs, with the same
+    search as the list, so every tab shows how many it holds before it is opened."""
+    query = db.query(SupportTicket.status, SupportTicket.unread_support, func.count(SupportTicket.id)) \
+        .join(Company, Company.id == SupportTicket.company_id)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(or_(SupportTicket.subject.ilike(like), Company.name.ilike(like), SupportTicket.raised_by_name.ilike(like)))
+    counts = {s: 0 for s in STATUSES}
+    unread = {s: 0 for s in STATUSES}
+    for status, is_unread, n in query.group_by(SupportTicket.status, SupportTicket.unread_support).all():
+        counts[status] = counts.get(status, 0) + n
+        if is_unread:
+            unread[status] = unread.get(status, 0) + n
+    return {"counts": counts, "unread": unread}
+
+
 @router.get("/superadmin/support/unread")
 def support_unread(db: Session = Depends(get_db), _: User = Depends(_require_superadmin)) -> dict:
     n = db.query(func.count(SupportTicket.id)).filter(SupportTicket.unread_support.is_(True)).scalar() or 0

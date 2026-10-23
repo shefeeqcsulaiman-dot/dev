@@ -3,14 +3,13 @@ leave type that uses the balance; removing it from the rota cancels one-day leav
 from datetime import date, timedelta
 
 from app.models import LeaveRequest
+from tests.leave_dates import leave_day
 from tests.test_leave_accrual import _company_id, _employee
 
 
 def _day(n=40):
-    d = date.today() + timedelta(days=n)
-    while d.weekday() >= 5:   # a weekday, so it is a leave day on any basis
-        d += timedelta(days=1)
-    return d
+    # a weekday that isn't a saved public holiday, so it is a leave day on any basis
+    return leave_day(n)
 
 
 def test_rota_leave_books_approved_leave(client, db, auth_headers):

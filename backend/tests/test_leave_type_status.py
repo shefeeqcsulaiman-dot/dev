@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 
 from tests.test_ess_requests import _company_id, _ess_login
+from tests.leave_dates import leave_day
 
 
 def _set_policy(client, headers, inactive):
@@ -16,7 +17,7 @@ def _set_policy(client, headers, inactive):
 def test_inactive_type_is_refused_and_hidden(client, db, auth_headers):
     cid = _company_id(client, auth_headers)
     emp, h = _ess_login(client, db, auth_headers, cid, "LTS-1", "lts.one")
-    day = (date.today() + timedelta(days=20)).isoformat()
+    day = leave_day(20).isoformat()
     try:
         _set_policy(client, auth_headers, {"Hajj Leave"})
 
@@ -35,7 +36,7 @@ def test_inactive_type_is_refused_and_hidden(client, db, auth_headers):
         assert r.status_code == 201, r.text
 
         _set_policy(client, auth_headers, set())
-        later = (date.today() + timedelta(days=40)).isoformat()
+        later = leave_day(40).isoformat()
         r = client.post("/api/v1/ess/leave", headers=h, json={"leave_type": "Hajj Leave", "start_date": later, "end_date": later})
         assert r.status_code == 201, r.text
         assert "Hajj Leave" in client.get("/api/v1/ess/leave-balance", headers=h).json()["by_type"]
