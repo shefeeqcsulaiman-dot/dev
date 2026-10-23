@@ -1839,6 +1839,11 @@ class EmployeeLocationLog(Base, TimestampMixin):
     inside_geofence: Mapped[bool] = mapped_column(Boolean, default=True)
     device: Mapped[str | None] = mapped_column(String(120))
     battery: Mapped[int | None] = mapped_column(Integer)
+    # The phone said the position came from a mock-location (fake GPS) app; see /hr/gps-alerts.
+    is_mock: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
+ESS_REFRESH_IDLE_DAYS = 90  # an ESS refresh token unused this long stops working
 
 
 class EssRefreshToken(Base, TimestampMixin):

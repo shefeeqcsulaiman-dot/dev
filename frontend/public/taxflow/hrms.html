@@ -1234,6 +1234,15 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
               <thead><tr><th>Employee</th><th>Checked In</th><th>Geofence</th><th>Last Ping</th></tr></thead>
               <tbody id="hr-live-tbody"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Loading…</td></tr></tbody>
             </table>
+            <div class="flx" style="justify-content:space-between;margin:18px 0 8px">
+              <div class="card-title">Fake GPS attempts <span class="b b-r" id="hr-gps-alerts-count" style="display:none;margin-left:6px"></span></div>
+              <span style="font-size:11.5px;color:var(--text3)">Last 30 days</span>
+            </div>
+            <p style="font-size:11.5px;color:var(--text3);margin:0 0 8px">The ESS app reports when a phone's position comes from a fake-location app. Those check-ins are refused and listed here.</p>
+            <table class="tbl">
+              <thead><tr><th>Employee</th><th>When</th><th>What</th><th>Phone</th></tr></thead>
+              <tbody id="hr-gps-alerts-tbody"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Loading…</td></tr></tbody>
+            </table>
           </div>
         </div>
         <div>
@@ -1954,6 +1963,23 @@ body:not(.theme-light) #page-hrms .hd-hero-note{color:#bfdbfe}
         <div class="modal-foot">
           <button class="btn btn-g" onclick="closeM('m-hr-user')">Cancel</button>
           <button class="btn btn-p" onclick="saveHrUser()">Save Access</button>
+        </div>
+      </div>
+    </div>
+    <!-- Signed-in devices (ESS mobile app) -->
+    <div class="overlay" id="m-hr-devices" onclick="closeOvBg(event,'m-hr-devices')">
+      <div class="modal" style="max-width:620px">
+        <button class="modal-x" onclick="closeM('m-hr-devices')">×</button>
+        <div class="modal-title">Signed-in Devices</div>
+        <div class="modal-sub" id="hr-devices-sub">Phones signed in to the ESS app</div>
+        <p style="font-size:11.5px;color:var(--text3);margin:0 0 10px">Phones stay signed in so automatic GPS check-in keeps working. If a phone is lost or handed in, sign it out: it stops working within a day.</p>
+        <table class="tbl" data-delete-actions-bound="skip">
+          <thead><tr><th>Device</th><th>Signed in</th><th>Last used</th><th>Status</th><th></th></tr></thead>
+          <tbody id="hr-devices-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px">Loading…</td></tr></tbody>
+        </table>
+        <div class="modal-foot">
+          <button class="btn btn-g" onclick="closeM('m-hr-devices')">Close</button>
+          <button class="btn btn-r" id="hr-devices-signout-all" onclick="signOutAllHrDevices()">Sign out all</button>
         </div>
       </div>
     </div>

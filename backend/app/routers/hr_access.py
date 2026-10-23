@@ -51,6 +51,8 @@ from app.models import (
     EmployeeBranchAccess,
     EmployeeLocation,
     EmployeeLocationLog,
+    ESS_REFRESH_IDLE_DAYS,
+    EssRefreshToken,
     Permission,
     Role,
     RolePermission,
@@ -483,6 +485,13 @@ class GeoPoint(BaseModel):
     accuracy: float | None = Field(default=None, ge=0)
     device: str | None = Field(default=None, max_length=200)
     battery: int | None = Field(default=None, ge=0, le=100)
+    # Android marks positions from mock-location ("fake GPS") apps; the mobile app passes it on.
+    is_mock: bool | None = None
+
+
+_FAKE_GPS_DETAIL = ("Your phone is using a fake location app, so GPS check-in is blocked. "
+                    "Turn off any mock-location app (Settings > Developer options > Select mock location app) "
+                    "and try again. HR has been notified of this attempt.")
 
 
 def _create_employee_token(employee_id: str, role_id: str | None) -> str:
@@ -1075,6 +1084,102 @@ def revoke_employee_portal_access(
     return {"ok": True}
 
 
+# ── signed-in devices (ESS mobile app refresh tokens) ────────────────────────
+#
+# The Android app stays signed in with a refresh token (ess.py, POST /ess/refresh), so a
+# lost or handed-in phone keeps working until HR signs it out here.
+
+class EmployeeDeviceOut(BaseModel):
+    id: str
+    device: str | None = None
+    signed_in_at: str
+    last_used_at: str
+    active: bool
+    status: str        # "Signed in", "Signed out", "Expired", "Password changed"
+
+
+def _device_status(row: EssRefreshToken, emp: Employee, now: datetime) -> str:
+    def aware(dt):
+        return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=UTC)
+    if row.revoked_at is not None:
+        return "Signed out"
+    changed = aware(emp.password_changed_at)
+    if changed and changed > aware(row.issued_at):
+        return "Password changed"
+    if now - aware(row.last_used_at) > timedelta(days=ESS_REFRESH_IDLE_DAYS):
+        return "Expired"
+    return "Signed in"
+
+
+def _device_target(db: Session, principal: Principal, employee_id: str) -> Employee:
+    target = db.query(Employee).filter(Employee.id == employee_id, Employee.company_id == principal.company_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    assert_employee_in_scope(principal, target)  # department-scoped role: only its departments
+    return target
+
+
+@gated_router.get("/admin/employees/{employee_id}/devices", response_model=list[EmployeeDeviceOut])
+def list_employee_devices(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:view", "hr_settings:edit")),
+) -> list[EmployeeDeviceOut]:
+    """Phones this employee signed in to the ESS app on, most recently used first."""
+    target = _device_target(db, principal, employee_id)
+    now = datetime.now(UTC)
+    rows = (
+        db.query(EssRefreshToken)
+        .filter(EssRefreshToken.employee_id == target.id, EssRefreshToken.company_id == principal.company_id)
+        .order_by(EssRefreshToken.last_used_at.desc())
+        .limit(50)
+        .all()
+    )
+    out = []
+    for row in rows:
+        state = _device_status(row, target, now)
+        out.append(EmployeeDeviceOut(
+            id=row.id, device=row.device, signed_in_at=_iso_utc(row.issued_at), last_used_at=_iso_utc(row.last_used_at),
+            active=state == "Signed in", status=state,
+        ))
+    return out
+
+
+@gated_router.post("/admin/employees/{employee_id}/devices/{device_id}/sign-out")
+def sign_out_employee_device(
+    employee_id: str,
+    device_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
+) -> dict:
+    """Signs one phone out. Its current 24h access token still works until it expires (tokens
+    are stateless), but it can't renew, so automatic check-in on it stops within a day."""
+    target = _device_target(db, principal, employee_id)
+    row = db.query(EssRefreshToken).filter(EssRefreshToken.id == device_id, EssRefreshToken.employee_id == target.id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if row.revoked_at is None:
+        row.revoked_at = datetime.now(UTC)
+        db.commit()
+    return {"ok": True}
+
+
+@gated_router.post("/admin/employees/{employee_id}/devices/sign-out-all")
+def sign_out_all_employee_devices(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr_settings:edit")),
+) -> dict:
+    target = _device_target(db, principal, employee_id)
+    count = (
+        db.query(EssRefreshToken)
+        .filter(EssRefreshToken.employee_id == target.id, EssRefreshToken.revoked_at.is_(None))
+        .update({EssRefreshToken.revoked_at: datetime.now(UTC)}, synchronize_session=False)
+    )
+    db.commit()
+    return {"ok": True, "signed_out": count}
+
+
 class BranchAccessIn(BaseModel):
     branch_ids: list[str] = []
 
@@ -1429,6 +1534,17 @@ def check_in(
 ) -> CheckInOut:
     if attendance_method(db, emp.company_id) == "biometric":
         raise HTTPException(status_code=403, detail="Your company records attendance on the biometric device only, so phone check-in is off.")
+    if payload.is_mock:
+        # Refused, but kept: the attempt is what HR needs to see (GET /hr/gps-alerts).
+        db.add(EmployeeLocationLog(
+            company_id=emp.company_id, employee_id=emp.id, session_id=None,
+            latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
+            accuracy=Decimal(str(payload.accuracy)) if payload.accuracy is not None else None,
+            inside_geofence=False, device=payload.device, battery=payload.battery, is_mock=True,
+        ))
+        db.commit()
+        logger.warning("GPS check-in refused for employee %s: mock location", emp.id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_FAKE_GPS_DETAIL)
     existing = (
         db.query(AttendanceSession)
         .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
@@ -1591,12 +1707,16 @@ def ping_location(
     if loc:
         distance = _distance_meters(payload.latitude, payload.longitude, float(loc.latitude), float(loc.longitude))
         inside = distance <= loc.allowed_radius_meters
+    if payload.is_mock:
+        # A faked position proves nothing about where the phone is: count it as outside, so
+        # the usual grace-period auto check-out applies, and list it for HR.
+        inside = False
 
     db.add(EmployeeLocationLog(
         company_id=emp.company_id, employee_id=emp.id, session_id=session.id,
         latitude=Decimal(str(payload.latitude)), longitude=Decimal(str(payload.longitude)),
         accuracy=Decimal(str(payload.accuracy)) if payload.accuracy is not None else None,
-        inside_geofence=inside, device=payload.device, battery=payload.battery,
+        inside_geofence=inside, device=payload.device, battery=payload.battery, is_mock=bool(payload.is_mock),
     ))
     db.commit()
 
@@ -1651,6 +1771,45 @@ def _maybe_auto_checkout(db: Session, session: AttendanceSession) -> bool:
 
 
 # ── live tracking ────────────────────────────────────────────────────────────
+
+class GpsAlertOut(BaseModel):
+    id: str
+    employee_id: str
+    employee_name: str
+    employee_no: str
+    department: str | None = None
+    at: str
+    kind: str          # "check-in" (refused) or "while checked in" (a ping)
+    latitude: float
+    longitude: float
+    device: str | None = None
+
+
+@gated_router.get("/gps-alerts", response_model=list[GpsAlertOut])
+def gps_alerts(
+    days: int = Query(default=30, ge=1, le=180),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_principal_permission("hr:view_all_attendance")),
+) -> list[GpsAlertOut]:
+    """Fake-GPS attempts (positions the phone flagged as mock), newest first, for the
+    departments this HR user can see -- the same reach as Live Employee Locations."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    rows = (
+        db.query(EmployeeLocationLog, Employee)
+        .join(Employee, Employee.id == EmployeeLocationLog.employee_id)
+        .filter(EmployeeLocationLog.company_id == principal.company_id, EmployeeLocationLog.is_mock.is_(True),
+                EmployeeLocationLog.created_at >= since)
+    )
+    rows = scope_employee_query_by_names(rows, principal.department_scope)
+    out = []
+    for log, e in rows.order_by(EmployeeLocationLog.created_at.desc()).limit(200).all():
+        out.append(GpsAlertOut(
+            id=log.id, employee_id=e.id, employee_name=e.full_name, employee_no=e.employee_no, department=e.department,
+            at=_iso_utc(log.created_at), kind="check-in" if log.session_id is None else "while checked in",
+            latitude=float(log.latitude), longitude=float(log.longitude), device=log.device,
+        ))
+    return out
+
 
 class LiveLocationOut(BaseModel):
     employee_id: str

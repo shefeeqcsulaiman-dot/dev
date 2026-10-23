@@ -2911,6 +2911,30 @@ async function loadLiveLocations(){
       <td>${escapeHtml(String(p.last_ping||'').substring(0,16).replace('T',' '))}</td>
     </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No employees currently checked in.</td></tr>';
   }catch(e){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+  loadGpsAlerts();
+}
+
+// Fake-GPS attempts reported by the ESS mobile app (GET /hr/gps-alerts).
+async function loadGpsAlerts(){
+  const tbody=document.getElementById('hr-gps-alerts-tbody');
+  const badge=document.getElementById('hr-gps-alerts-count');
+  if(!tbody)return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/gps-alerts?days=30`,{headers:hrAccessHeaders()});
+    if(r.status===401||r.status===403){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Your role does not have live-attendance access.</td></tr>';return;}
+    const rows=await r.json();
+    if(badge){badge.textContent=rows.length;badge.style.display=rows.length?'':'none';}
+    tbody.innerHTML=rows.length?rows.map(a=>{
+      const when=new Date(a.at);
+      const shown=isNaN(when)?String(a.at).substring(0,16).replace('T',' '):when.toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return `<tr>
+        <td>${escapeHtml(a.employee_name)} <span class="mono" style="font-size:11px;color:var(--text3)">${escapeHtml(a.employee_no)}</span></td>
+        <td style="font-size:12px">${escapeHtml(shown)}</td>
+        <td>${a.kind==='check-in'?'<span class="b b-r">Check-in refused</span>':'<span class="b b-a">While checked in</span>'}</td>
+        <td style="font-size:11.5px;color:var(--text2)">${escapeHtml(a.device||'—')}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No fake-location attempts. </td></tr>';
+  }catch(e){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
 }
 
 function localApiUrlFor(url){
@@ -20763,6 +20787,7 @@ function _renderHrUsersTable(){
       <td>${statusBadge}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-g btn-xs" onclick="openAddHrUserModal('${escapeHtml(e.id)}')">${hasAccess?'Edit':'Grant Access'}</button>
+        ${hasAccess?`<button class="btn btn-g btn-xs" onclick="openHrDevices('${escapeHtml(e.id)}')" title="Phones signed in to the ESS app">Devices</button>`:''}
         ${hasAccess?`<button class="btn btn-r btn-xs" onclick="deleteHrUser('${escapeHtml(e.id)}')">Revoke</button>`:''}
       </td>
     </tr>`;
@@ -20833,6 +20858,61 @@ async function deleteHrUser(employeeId){
     const r=await fetch(`${apiBaseUrl()}/hr/admin/employees/${employeeId}/portal-access`,{method:'DELETE',headers:backendHeaders()});
     if(r.ok){toast('Portal access revoked','ok');loadHrUsersAndRoles();}
     else{toast('Failed to revoke access','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+
+// -- SIGNED-IN DEVICES (ESS mobile app) ----------------------------
+// The Android app keeps a phone signed in (refresh token) for automatic GPS check-in; HR
+// signs a lost or handed-in phone out here (/hr/admin/employees/{id}/devices).
+let _hrDevicesEmployeeId=null;
+function _fmtDeviceTime(iso){
+  if(!iso)return '—';
+  const d=new Date(iso);
+  return isNaN(d)?String(iso).substring(0,16).replace('T',' '):d.toLocaleString(undefined,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+async function openHrDevices(employeeId){
+  const emp=_hrEmployeesCache.find(e=>e.id===employeeId);
+  _hrDevicesEmployeeId=employeeId;
+  const sub=document.getElementById('hr-devices-sub');
+  if(sub)sub.textContent=`Phones ${emp?emp.full_name:'this employee'} is signed in to the ESS app on`;
+  showM('m-hr-devices');
+  await loadHrDevices();
+}
+async function loadHrDevices(){
+  const tbody=document.getElementById('hr-devices-tbody');
+  const allBtn=document.getElementById('hr-devices-signout-all');
+  if(!tbody||!_hrDevicesEmployeeId)return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/admin/employees/${encodeURIComponent(_hrDevicesEmployeeId)}/devices`,{headers:backendHeaders()});
+    if(r.status===403){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px">Your role cannot view devices.</td></tr>';return;}
+    const rows=await r.json();
+    if(allBtn)allBtn.style.display=rows.some(d=>d.active)?'':'none';
+    tbody.innerHTML=rows.length?rows.map(d=>{
+      const badge=d.active?'<span class="b b-g">Signed in</span>':`<span class="b" style="background:var(--bg3)">${escapeHtml(d.status)}</span>`;
+      return `<tr>
+        <td style="font-size:12px">${escapeHtml(d.device||'Android phone')}</td>
+        <td style="font-size:12px">${escapeHtml(_fmtDeviceTime(d.signed_in_at))}</td>
+        <td style="font-size:12px">${escapeHtml(_fmtDeviceTime(d.last_used_at))}</td>
+        <td>${badge}</td>
+        <td>${d.active?`<button class="btn btn-r btn-xs" onclick="signOutHrDevice('${escapeHtml(d.id)}')">Sign out</button>`:''}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px">Not signed in to the ESS app on any phone.</td></tr>';
+  }catch(e){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text3)">Failed to load.</td></tr>';}
+}
+async function signOutHrDevice(deviceId){
+  if(!(await appConfirm({title:'Sign out this phone',message:'This phone stops working within a day and will need to sign in again. Automatic check-in on it stops too.',okText:'Sign out'})))return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/admin/employees/${encodeURIComponent(_hrDevicesEmployeeId)}/devices/${encodeURIComponent(deviceId)}/sign-out`,{method:'POST',headers:backendHeaders()});
+    if(r.ok){toast('Phone signed out','ok');loadHrDevices();}
+    else{const d=await r.json().catch(()=>({}));toast(d.detail||'Could not sign the phone out','err');}
+  }catch(e){toast('Cannot reach server','err');}
+}
+async function signOutAllHrDevices(){
+  if(!(await appConfirm({title:'Sign out all phones',message:'Every phone this employee uses the ESS app on will need to sign in again.',okText:'Sign out all'})))return;
+  try{
+    const r=await fetch(`${apiBaseUrl()}/hr/admin/employees/${encodeURIComponent(_hrDevicesEmployeeId)}/devices/sign-out-all`,{method:'POST',headers:backendHeaders()});
+    if(r.ok){const d=await r.json();toast(`${d.signed_out||0} phone(s) signed out`,'ok');loadHrDevices();}
+    else{toast('Could not sign the phones out','err');}
   }catch(e){toast('Cannot reach server','err');}
 }
 

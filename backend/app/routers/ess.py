@@ -25,7 +25,7 @@ from app.database import get_db
 from app.dependencies import assert_company_active, company_allows_module
 from app.limiter import limiter
 from app.rota_days import rota_day_statuses
-from app.models import AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, EssRefreshToken, LeaveRequest, PayrollItem, PayrollRun, Role, RotaRecord
+from app.models import ESS_REFRESH_IDLE_DAYS, AppDataRecord, AttendanceDetail, AuditLog, Company, Employee, EssRefreshToken, LeaveRequest, PayrollItem, PayrollRun, Role, RotaRecord
 from app.routers.attendance import _company_offset, _ot_cooloff_seconds, overtime_eligibility_rows, _late_rules, _local_today, _standard_hours_per_day, _weekend_day_set
 from app.routers.leave import (
     _ALLOWED_TYPES,
@@ -233,7 +233,6 @@ def ess_login(request: Request, payload: EssLoginRequest, db: Session = Depends(
 # would stop the app's automatic GPS check-in a day after sign-in. The app keeps a refresh
 # token instead and trades it here for a new access token whenever one expires.
 
-ESS_REFRESH_IDLE_DAYS = 90
 _REFRESH_INVALID = "Your sign-in has expired. Please sign in again."
 
 

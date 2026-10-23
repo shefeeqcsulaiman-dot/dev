@@ -51,6 +51,10 @@ celery_app.conf.beat_schedule = {
         "task": "companies.purge_recycle_bin",
         "schedule": crontab(hour=3, minute=0),
     },
+    "ess-cleanup-refresh-tokens": {
+        "task": "ess.cleanup_refresh_tokens",
+        "schedule": crontab(hour=3, minute=30),
+    },
 }
 
 _STALE_SESSION_HOURS = 16  # longer than any shift: the check-out was forgotten
@@ -283,6 +287,40 @@ def backup_company_batch(company_ids: list[str], date_str: str) -> dict:
         if failed:
             _platform_audit(db, "nightly_backup_failed", f"{date_str}: backup failed for {len(failed)} compan(ies): {', '.join(failed[:20])}")
         return {"done": done, "failed": failed}
+    finally:
+        db.close()
+
+
+# Signed-out ESS app sign-ins are kept a while so HR still sees them under Signed-in devices.
+_REFRESH_TOKEN_KEEP_DAYS = 30
+
+
+def delete_dead_refresh_tokens(db, now: datetime) -> int:
+    """Removes ESS refresh tokens that can never work again: signed out over a month ago,
+    or unused for ESS_REFRESH_IDLE_DAYS plus that month."""
+    from sqlalchemy import or_
+
+    from app.models import ESS_REFRESH_IDLE_DAYS, EssRefreshToken
+
+    keep = timedelta(days=_REFRESH_TOKEN_KEEP_DAYS)
+    count = (
+        db.query(EssRefreshToken)
+        .filter(or_(EssRefreshToken.revoked_at < now - keep,
+                    EssRefreshToken.last_used_at < now - timedelta(days=ESS_REFRESH_IDLE_DAYS) - keep))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return count
+
+
+@celery_app.task(name="ess.cleanup_refresh_tokens")
+def cleanup_refresh_tokens() -> dict:
+    db = SessionLocal()
+    try:
+        deleted = delete_dead_refresh_tokens(db, datetime.now(UTC))
+        if deleted:
+            logger.info("Deleted %s dead ESS refresh tokens", deleted)
+        return {"deleted": deleted}
     finally:
         db.close()
 
