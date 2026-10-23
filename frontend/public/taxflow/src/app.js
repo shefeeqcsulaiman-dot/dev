@@ -19662,9 +19662,49 @@ async function populateLeaveEmployeeSelect(){
   try{
     const r=await fetch(`${apiBaseUrl()}/payroll/employees`,{headers:backendHeaders()});
     const employees=r.ok?await r.json():[];
-    sel.innerHTML='<option value="">— Select Employee —</option>'+
-      employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.full_name)}</option>`).join('');
+    attachSelectSearch(sel,employees.map(e=>({value:e.id,label:e.full_name,
+      q:[e.full_name,e.employee_no,e.department].filter(Boolean).join(' ')})),'— Select Employee —','Search by name, employee no. or department…');
   }catch(e){sel.innerHTML='<option value="">Failed to load employees</option>';}
+}
+
+// A search box above a long <select> (e.g. Apply for Leave > Employee): typing narrows the list
+// to matching entries (name, number, department...), one match is picked at once, Enter picks the
+// first. The options are rebuilt rather than hidden: Safari ignores hidden <option>s.
+// items: [{value,label,q}] (q: extra text to match). Safe to call again with a new list.
+function attachSelectSearch(sel,items,placeholderOption,searchPlaceholder){
+  if(!sel)return;
+  sel._searchItems=items||[];
+  let box=sel.previousElementSibling?.dataset?.selectSearch?sel.previousElementSibling:null;
+  if(!box){
+    box=document.createElement('input');
+    box.className='fi';
+    box.type='search';
+    box.dataset.selectSearch='1';
+    box.placeholder=searchPlaceholder||'Search…';
+    box.setAttribute('aria-label',searchPlaceholder||'Search');
+    box.style.marginBottom='6px';
+    sel.parentNode.insertBefore(box,sel);
+    box.addEventListener('input',()=>_renderSelectSearch(sel,box.value));
+    box.addEventListener('keydown',e=>{
+      if(e.key!=='Enter')return;
+      e.preventDefault();
+      const first=[...sel.options].find(o=>o.value);
+      if(first){sel.value=first.value;sel.dispatchEvent(new Event('change',{bubbles:true}));}
+    });
+  }
+  sel._searchPlaceholder=placeholderOption||'— Select —';
+  box.value='';
+  _renderSelectSearch(sel,'');
+}
+function _renderSelectSearch(sel,query){
+  const q=String(query||'').trim().toLowerCase();
+  const keep=sel.value;
+  const matches=(sel._searchItems||[]).filter(it=>!q||`${it.label} ${it.q||''}`.toLowerCase().includes(q));
+  sel.innerHTML=`<option value="">${escapeHtml(q&&!matches.length?'No employee matches':sel._searchPlaceholder)}</option>`+
+    matches.map(it=>`<option value="${escapeHtml(it.value)}">${escapeHtml(it.label)}</option>`).join('');
+  if(matches.length===1)sel.value=matches[0].value;
+  else if(matches.some(it=>String(it.value)===keep))sel.value=keep;
+  if(sel.value!==keep)sel.dispatchEvent(new Event('change',{bubbles:true}));
 }
 
 // The leave list is also fetched by the Leave Balance and Attendance loaders via
@@ -20797,7 +20837,7 @@ async function deleteHrUser(employeeId){
 }
 
 // -- LEAVE POLICY --------------------------------------------------
-function saveLeavePolicies(){
+async function saveLeavePolicies(){
   const types=[...document.querySelectorAll('#leave-types-tbody tr[data-leave-type]')].map(tr=>{
     const cells=[...tr.querySelectorAll('input,select')];
     return{
@@ -20838,7 +20878,14 @@ function saveLeavePolicies(){
   const carryDeadline=document.getElementById('leave-carry-deadline')?.value||'End of March';
   const encashTiming=document.getElementById('leave-encash-timing')?.value||'On resignation / gratuity';
   const data={leave_types:types,leave_policies:policies,year_start:yearStart,accrual,carry_deadline:carryDeadline,encash_timing:encashTiming};
-  saveServer('hrLeavePolicy',{id:'leave-policy',...data});
+  // "Saved" only once the server has it: this used to show before the save returned, so a
+  // refused save left Inactive types (and day counts) unchanged on the server and in ESS.
+  try{
+    await saveServer('hrLeavePolicy',{id:'leave-policy',...data},{throwOnError:true});
+  }catch(err){
+    toast(`Leave policy not saved${err?.serverDetail?`: ${err.serverDetail}`:''}. Please try again.`,'err',9000);
+    return;
+  }
   _applyLeavePolicyDaysToMap(policies);
   _applyInactiveLeaveTypes(types.filter(t=>t.status==='Inactive').map(t=>t.type));
   toast('Leave policy saved','ok');
