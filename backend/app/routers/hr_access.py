@@ -1503,12 +1503,44 @@ def check_in(
     return CheckInOut(session_id=session.id, status="open", check_in=str(session.check_in), location_name=loc.location_name, distance_meters=distance)
 
 
+class CheckOutIn(BaseModel):
+    """Check-out body: where the phone is (optional) and, from the mobile app's automatic
+    check-out, when the employee left the site (left_at)."""
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    accuracy: float | None = Field(default=None, ge=0)
+    device: str | None = Field(default=None, max_length=200)
+    battery: int | None = Field(default=None, ge=0, le=100)
+    left_at: datetime | None = None
+
+
+# How old a phone-reported leaving time may be (the phone was offline when the employee left).
+_MAX_LEFT_AT_AGE = timedelta(hours=12)
+
+
+def _check_out_time(left_at: datetime | None, checked_in: datetime, now: datetime) -> datetime:
+    """When the day ends: the time the phone says the employee left the site, if it is
+    plausible, else now. A phone that was offline when its owner walked out sends the check-out
+    later, and recording that later time paid hours nobody worked. The phone's clock is only
+    trusted to make the day shorter, never longer: the time must be after the check-in, not in
+    the future, and at most _MAX_LEFT_AT_AGE ago."""
+    if left_at is None:
+        return now
+    left = (left_at if left_at.tzinfo else left_at.replace(tzinfo=UTC)).astimezone(UTC)
+    start = checked_in if checked_in.tzinfo else checked_in.replace(tzinfo=UTC)
+    if left > now or left <= start or now - left > _MAX_LEFT_AT_AGE:
+        return now
+    return left
+
+
 @gated_router.post("/check-out")
 def check_out(
-    payload: GeoPoint | None = None,
+    payload: CheckOutIn | None = None,
     db: Session = Depends(get_db),
     emp: Employee = Depends(get_current_employee),
 ) -> dict:
+    has_point = payload is not None and payload.latitude is not None and payload.longitude is not None
+    left_at = payload.left_at if payload else None
     session = (
         db.query(AttendanceSession)
         .filter(AttendanceSession.employee_id == emp.id, AttendanceSession.status == "open")
@@ -1516,26 +1548,27 @@ def check_out(
     )
     if not session:
         # Checked in on the biometric device: the phone may end the day (a GPS check-out).
-        if _open_day_punch(db, emp):
-            now = datetime.now(UTC)
+        day = _open_day_punch(db, emp)
+        if day:
+            when = _check_out_time(left_at, day["at"], datetime.now(UTC))
             where = None
-            if payload:
+            if has_point:
                 nearest = _nearest_assigned_location(db, emp.id, payload.latitude, payload.longitude)
                 where = nearest[0].location_name if nearest else None
-            _record_gps_punch(db, emp, now, "out", where)
-            return {"ok": True, "session_id": None, "check_out": str(now), "source": "device"}
+            _record_gps_punch(db, emp, when, "out", where)
+            return {"ok": True, "session_id": None, "check_out": str(when), "source": "device"}
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not checked in")
-    now = datetime.now(UTC)
-    session.check_out = now
+    when = _check_out_time(left_at, session.check_in, datetime.now(UTC))
+    session.check_out = when
     session.status = "closed"
-    if payload:
+    if has_point:
         session.check_out_lat = Decimal(str(payload.latitude))
         session.check_out_lng = Decimal(str(payload.longitude))
     db.add(session)
     db.commit()
     loc = db.get(CompanyLocation, session.location_id) if session.location_id else None
-    _record_gps_punch(db, emp, now, "out", loc.location_name if loc else None)
-    return {"ok": True, "session_id": session.id, "check_out": str(now)}
+    _record_gps_punch(db, emp, when, "out", loc.location_name if loc else None)
+    return {"ok": True, "session_id": session.id, "check_out": str(when)}
 
 
 @gated_router.post("/location")

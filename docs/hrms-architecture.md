@@ -667,6 +667,14 @@ portal access is revoked (`password_hash` cleared) or switched off
 (`assert_employee_may_sign_in`), or when ESS is disabled for the company. Not
 included in backups (sign-in data never is). Tests: `test_ess_refresh_tokens.py`.
 
+**Check-out at the time the employee left (2026-10-23)** — the app's automatic
+check-out runs when the phone leaves the site's geofence, but a phone with no
+signal sends it later, and `/hr/check-out` recorded the request time. It now
+takes an optional `left_at`; `_check_out_time()` uses it only to make the day
+shorter (after the check-in, not in the future, at most 12 hours old), else
+now. Check-in has no such field on purpose: an earlier time there would add
+paid hours. Tests: `test_gps_checkout_left_at.py`.
+
 Leave requests ARE submittable from ESS (2026-09-02) — `POST /ess/leave`
 mirrors `POST /leave/requests`'s validation (allowed types, no
 overlapping pending/approved request) but always targets the token's own
